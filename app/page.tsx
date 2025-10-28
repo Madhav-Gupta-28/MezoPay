@@ -12,9 +12,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card } from "@/components/ui/card"
 import { Wallet, QrCode, ArrowUpRight, Shield, Coins, ScanLine, Zap } from "lucide-react"
+import { useWallet } from "@/hooks/use-wallet"
 
 export default function Home() {
   const [qrAmount, setQrAmount] = useState("100")
+  const { isConnected, balance } = useWallet()
 
   return (
     <div className="min-h-screen bg-background">
@@ -65,11 +67,15 @@ export default function Home() {
             {/* Right Column - Wallet Snapshot */}
             <div className="rounded-2xl border border-border/50 bg-card p-8 card-premium space-y-8">
               <div className="space-y-4">
-                <StatCard label="MUSD Balance" value="1,240.00" accent />
-                <StatCard label="BTC Collateral" value="0.2150 BTC" hint="≈ $14,420" />
+                <StatCard label="MUSD Balance" value={isConnected ? "1,240.00" : "Connect wallet"} accent />
+                <StatCard 
+                  label="BTC Collateral" 
+                  value={isConnected ? (balance.formatted ? `${parseFloat(balance.formatted).toFixed(4)} ${balance.symbol}` : "0 BTC") : "Connect wallet"} 
+                  hint={isConnected ? "≈ $14,420" : ""} 
+                />
               </div>
 
-              <SafetyBar percent={86} band="green" />
+              <SafetyBar percent={isConnected ? 86 : 0} band={isConnected ? "green" : "red"} />
 
               {/* Action Buttons */}
               <div className="grid grid-cols-3 gap-3">
