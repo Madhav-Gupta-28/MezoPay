@@ -38,6 +38,12 @@ export function Navigation() {
               Pay
             </Link>
             <Link
+              href="/redeem"
+              className="text-sm font-medium text-foreground/70 hover:text-primary transition-colors duration-200"
+            >
+              Redeem
+            </Link>
+            <Link
               href="/activity"
               className="text-sm font-medium text-foreground/70 hover:text-primary transition-colors duration-200"
             >
