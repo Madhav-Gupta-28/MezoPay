@@ -7,7 +7,6 @@ import { Label } from "@/components/ui/label"
 import { Card } from "@/components/ui/card"
 import { X, ArrowRight, Loader2, CheckCircle2, AlertCircle } from "lucide-react"
 import { useRedeem } from "@/hooks/useRedeem"
-import { useWithdrawColl } from "@/hooks/useWithdrawColl"
 import { useAccount } from "wagmi"
 import { toast } from "sonner"
 
@@ -22,7 +21,6 @@ export function RedeemModal({ isOpen, onClose, lockedBtc, musdDebt }: RedeemModa
   const [musdRepay, setMusdRepay] = useState("")
   const { redeem, isPending, isConfirming, isConfirmed, error, hash } = useRedeem()
   const { isConnected } = useAccount()
-  const { withdraw, isPending: isWithdrawing } = useWithdrawColl()
  
   const btcToReceive = useMemo(() => {
     if (!musdRepay) return 0
@@ -45,21 +43,14 @@ export function RedeemModal({ isOpen, onClose, lockedBtc, musdDebt }: RedeemModa
 
     try {
       await redeem({ musdRepay })
-      toast.success("Repayment submitted successfully!")
+      toast.success("Transaction submitted! Your BTC will be returned.", {
+        description: "Check your wallet in a moment"
+      })
       setMusdRepay("")
       onClose()
     } catch (e: any) {
       console.error("Redemption error:", e)
-      toast.error("Repayment failed", { description: e?.message?.slice(0, 200) || "Unknown error" })
-    }
-  }
-
-  const handleWithdraw = async () => {
-    try {
-      await withdraw(String(btcToReceive || 0))
-      toast.success("Withdrawal submitted")
-    } catch (e: any) {
-      toast.error("Withdrawal failed", { description: e?.message?.slice(0, 140) })
+      toast.error("Transaction failed", { description: e?.message?.slice(0, 200) || "Unknown error" })
     }
   }
 
@@ -147,21 +138,11 @@ export function RedeemModal({ isOpen, onClose, lockedBtc, musdDebt }: RedeemModa
                 </span>
               ) : (
                 <>
-                  Get Back my BTC
+                  Repay & Get BTC Back
                   <ArrowRight className="h-4 w-4 ml-2" />
                 </>
               )}
             </Button>
-            {musdRepay && (
-              <Button
-                variant="outline"
-                onClick={handleWithdraw}
-                disabled={isWithdrawing}
-                className="flex-1 border-border/50 hover:border-primary/30 hover:bg-primary/5 bg-transparent"
-              >
-                Try Withdraw BTC
-              </Button>
-            )}
           </div>
         </div>
       </Card>

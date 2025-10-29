@@ -75,12 +75,13 @@ export function useRedeem() {
     }) as boolean;
 
     const repay = parseUnits(musdRepay, 18);
-    const repayCap = debt - gasComp; // max repay for closeTrove
-    const netDebt = debt - gasComp; // current net debt
+    const repayCap = debt - gasComp; // max repay for closeTrove (total debt - 200)
+    const netDebt = debt - gasComp; // current net debt (principal + interest)
     const newNetDebt = netDebt - repay; // remaining net debt after repayment
 
     // Decide between closeTrove and adjustTrove
-    const isFullRepay = repay >= repayCap;
+    // Consider it a full repay if the remaining would be very small (< 10 mUSD) or if repay >= repayCap
+    const isFullRepay = repay >= repayCap || newNetDebt < parseUnits("10", 18);
 
     if (isFullRepay && !isRecoveryMode) {
       // Full repayment in Normal Mode: use closeTrove
@@ -94,13 +95,15 @@ export function useRedeem() {
     }
 
     // Partial repayment OR (full repayment in Recovery Mode): use adjustTrove
-    // Client-side guard: ensure remaining net debt is >= minNetDebt (unless it's effectively a full repay)
+    // Client-side guard: ensure remaining net debt is >= minNetDebt
+    // But skip this check if it's effectively a full repay (even in Recovery Mode)
     if (!isFullRepay && newNetDebt > BigInt(0) && newNetDebt < minNetDebt) {
       const minNetDebtNum = Number(minNetDebt) / 1e18;
       const remainingNum = Number(newNetDebt) / 1e18;
-      const needToRepay = Number(netDebt - minNetDebt) / 1e18;
+      const maxPartialRepay = Number(netDebt - minNetDebt) / 1e18; // repay must be <= this to stay >= minNetDebt
+      const fullCloseRepay = Number(repayCap) / 1e18; // repay >= this fully closes
       throw new Error(
-        `Partial repayment would leave remaining debt (${remainingNum.toFixed(2)} mUSD) below minimum (${minNetDebtNum} mUSD). Please repay at least ${needToRepay.toFixed(2)} mUSD to meet the minimum, or repay ${(Number(repayCap) / 1e18).toFixed(2)} mUSD to fully close.`
+        `Invalid partial repay: remaining debt would be ${remainingNum.toFixed(2)} mUSD (< ${minNetDebtNum} mUSD). Either repay <= ${maxPartialRepay.toFixed(2)} mUSD to keep the trove open, or repay >= ${fullCloseRepay.toFixed(2)} mUSD to fully close.`
       );
     }
 
