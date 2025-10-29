@@ -126,18 +126,53 @@ export default function DepositPage() {
                       <h2 className="text-2xl font-bold text-foreground mb-6">Step 2: Mint MUSD</h2>
                       <div className="space-y-4">
                         <div>
-                          <Label htmlFor="musd-amount" className="font-semibold text-foreground">
-                            Amount (MUSD)
-                          </Label>
-                          <Input
-                            id="musd-amount"
-                            type="number"
-                            value={musdAmount}
-                            onChange={(e) => setMusdAmount(e.target.value)}
-                            placeholder="0.00"
-                            className="mt-2 border-border/50 focus:border-primary/50 text-lg"
-                          />
-                          <p className="text-xs text-muted-foreground mt-2">Max available: {maxMusd.toFixed(2)} MUSD</p>
+                          <div className="flex justify-between">
+                            <Label htmlFor="musd-amount" className="font-semibold text-foreground">
+                              Amount (MUSD)
+                            </Label>
+                            <div className="text-xs text-muted-foreground">
+                              Max available: {maxMusd.toFixed(2)} MUSD
+                            </div>
+                          </div>
+                          <div className="relative mt-2">
+                            <Input
+                              id="musd-amount"
+                              type="number"
+                              value={musdAmount}
+                              onChange={(e) => setMusdAmount(e.target.value)}
+                              placeholder="0.00"
+                              className="border-border/50 focus:border-primary/50 text-lg pr-[180px]"
+                            />
+                            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setMusdAmount((maxMusd * 0.25).toFixed(2))}
+                                className="h-7 px-2 text-xs hover:bg-primary/10 hover:text-primary"
+                              >
+                                25%
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setMusdAmount((maxMusd * 0.5).toFixed(2))}
+                                className="h-7 px-2 text-xs hover:bg-primary/10 hover:text-primary"
+                              >
+                                50%
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setMusdAmount(maxMusd.toFixed(2))}
+                                className="h-7 px-2 text-xs hover:bg-primary/10 hover:text-primary font-semibold"
+                              >
+                                MAX
+                              </Button>
+                            </div>
+                          </div>
                         </div>
 
                         {musdAmount && (
