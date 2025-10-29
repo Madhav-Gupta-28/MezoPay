@@ -44,7 +44,7 @@ export default function Home() {
                 <Button
                   size="lg"
                   onClick={() => router.push('/pockets')}
-                  className="bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-primary-foreground font-medium shadow-md hover:shadow-lg transition-all duration-200"
+                  className="bg-linear-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-primary-foreground font-medium shadow-md hover:shadow-lg transition-all duration-200"
                 >
                   Explore Pockets
                 </Button>
@@ -83,15 +83,15 @@ export default function Home() {
 
               {/* Action Buttons */}
               <div className="grid grid-cols-3 gap-3">
-                <button className="flex flex-col items-center gap-2 p-4 rounded-lg bg-gradient-to-br from-muted/50 to-muted/25 hover:from-primary/10 hover:to-primary/5 transition-all duration-300 group">
+                <button className="flex flex-col items-center gap-2 p-4 rounded-lg bg-linear-to-br from-muted/50 to-muted/25 hover:from-primary/10 hover:to-primary/5 transition-all duration-300 group">
                   <ArrowUpRight className="h-6 w-6 text-primary group-hover:scale-110 transition-transform" />
                   <span className="text-xs font-semibold text-foreground">Pay</span>
                 </button>
-                <button className="flex flex-col items-center gap-2 p-4 rounded-lg bg-gradient-to-br from-muted/50 to-muted/25 hover:from-primary/10 hover:to-primary/5 transition-all duration-300 group">
+                <button className="flex flex-col items-center gap-2 p-4 rounded-lg bg-linear-to-br from-muted/50 to-muted/25 hover:from-primary/10 hover:to-primary/5 transition-all duration-300 group">
                   <ArrowUpRight className="h-6 w-6 text-primary rotate-180 group-hover:scale-110 transition-transform" />
                   <span className="text-xs font-semibold text-foreground">Receive</span>
                 </button>
-                <button className="flex flex-col items-center gap-2 p-4 rounded-lg bg-gradient-to-br from-muted/50 to-muted/25 hover:from-primary/10 hover:to-primary/5 transition-all duration-300 group">
+                <button className="flex flex-col items-center gap-2 p-4 rounded-lg bg-linear-to-br from-muted/50 to-muted/25 hover:from-primary/10 hover:to-primary/5 transition-all duration-300 group">
                   <Coins className="h-6 w-6 text-primary group-hover:scale-110 transition-transform" />
                   <span className="text-xs font-semibold text-foreground">Repay</span>
                 </button>
@@ -215,9 +215,9 @@ export default function Home() {
             <QrPreview amount={qrAmount} memo="Payment for services" />
           </div>
 
-          <div className="mt-12 p-6 bg-gradient-to-r from-primary/5 to-primary/0 rounded-xl border border-primary/20">
+          <div className="mt-12 p-6 bg-linear-to-r from-primary/5 to-primary/0 rounded-xl border border-primary/20">
             <div className="flex gap-3">
-              <Zap className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+              <Zap className="h-5 w-5 text-primary shrink-0 mt-0.5" />
               <div>
                 <p className="font-semibold text-foreground mb-1">Instant Settlement</p>
                 <p className="text-sm text-muted-foreground">
@@ -272,7 +272,7 @@ export default function Home() {
             <div className="flex gap-3 pt-4">
               <Button
                 size="lg"
-                className="flex-1 bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-primary-foreground font-medium shadow-md hover:shadow-lg transition-all duration-200"
+                className="flex-1 bg-linear-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-primary-foreground font-medium shadow-md hover:shadow-lg transition-all duration-200"
               >
                 Repay Now
               </Button>
@@ -314,13 +314,13 @@ export default function Home() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-border/50 bg-gradient-to-b from-muted/30 to-background">
+      <footer className="border-t border-border/50 bg-linear-to-br from-muted/30 to-background">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-16">
           <div className="grid gap-12 md:grid-cols-2 mb-12">
             <div>
               <div className="flex items-center gap-3 mb-4">
-                <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-primary/70" />
-                <span className="font-bold text-lg text-foreground">M-Pockets Pay</span>
+                  <div className="h-8 w-8 rounded-lg bg-linear-to-br from-primary to-primary/70" />
+                <span className="font-bold text-lg text-foreground">MezoPay</span>
               </div>
               <p className="text-muted-foreground leading-relaxed max-w-sm">
                 Use Bitcoin like money. Spend in MUSD. Redeem anytime. Built on Mezo for self-custody and fixed-rate
@@ -349,7 +349,7 @@ export default function Home() {
             </div>
           </div>
           <div className="pt-8 border-t border-border/50">
-            <p className="text-xs text-muted-foreground">© 2025 M-Pockets Pay. Built on Mezo. All rights reserved.</p>
+            <p className="text-xs text-muted-foreground">© 2025 MezoPay. Built on Mezo. All rights reserved.</p>
           </div>
         </div>
       </footer>

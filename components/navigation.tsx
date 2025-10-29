@@ -13,7 +13,7 @@ export function Navigation() {
           <Link href="/" className="flex items-center gap-3 group">
             <div className="h-8 w-8 rounded-lg bg-linear-to-r from-primary to-primary/70 shadow-sm group-hover:shadow-md transition-shadow" />
             <span className="text-lg font-bold bg-linear-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
-              M-Pockets
+              MezoPay
             </span>
           </Link>
 

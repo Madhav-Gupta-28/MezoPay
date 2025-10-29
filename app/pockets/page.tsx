@@ -74,7 +74,7 @@ export default function PocketsPage() {
             </div>
             <Button
               onClick={() => setIsCreateModalOpen(true)}
-              className="gap-2 bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-primary-foreground font-medium shadow-md hover:shadow-lg transition-all duration-200 w-full md:w-auto"
+              className="gap-2 bg-linear-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-primary-foreground font-medium shadow-md hover:shadow-lg transition-all duration-200 w-full md:w-auto"
             >
               <Plus className="h-4 w-4" />
               Create Pocket
