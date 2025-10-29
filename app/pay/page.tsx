@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Navigation } from "@/components/navigation"
 import { QrModal } from "@/components/modals/qr-modal"
 import { Button } from "@/components/ui/button"
@@ -11,6 +11,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScanLine, QrCode, Send, CreditCard, AlertCircle, Check } from "lucide-react"
 import { QrScannerComponent } from "@/components/qr-scanner"
 import { ManualPay } from "@/components/manual-pay"
+import { useTransferMusd } from "@/hooks/useTransferMusd"
+import { useAccount } from "wagmi"
+import { toast } from "sonner"
 
 export default function PayPage() {
   const [amount, setAmount] = useState("100")
@@ -19,18 +22,21 @@ export default function PayPage() {
   const [scanResult, setScanResult] = useState<string | null>(null)
   const [paymentStatus, setPaymentStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [statusMessage, setStatusMessage] = useState("")
+  const { transfer, isPending, isConfirming, isConfirmed, error } = useTransferMusd()
+  const { address, isConnected } = useAccount()
 
-  const handleScan = (data: string) => {
+  const handleScan = async (data: string) => {
     console.log("Scan result received:", data)
     setScanResult(data)
     try {
       // Parse the QR code data
       let qrData;
       
-      if (data.startsWith("musd:pay?amount=")) {
+      if (data.startsWith("musd:pay?to=")) {
         // Our simpler format
         const url = new URL(data.replace("musd:pay", "https://example.com"));
         qrData = {
+          to: url.searchParams.get("to") || "",
           amount: url.searchParams.get("amount") || "0",
           memo: url.searchParams.get("memo") || ""
         }
@@ -41,9 +47,9 @@ export default function PayPage() {
         // Standard cryptocurrency URI format
         const url = new URL(data);
         qrData = {
+          to: data.split(":")[1].split("?")[0],
           amount: url.searchParams.get("amount") || "1",
           memo: url.searchParams.get("message") || "",
-          address: data.split(":")[1].split("?")[0]
         }
       } else {
         // Try to parse as JSON
@@ -52,29 +58,41 @@ export default function PayPage() {
         } catch {
           // Assume it's just an address
           qrData = { 
+            to: data,
             amount: "1", 
             memo: "Payment to address", 
-            address: data 
           }
         }
       }
       
-      // Show payment confirmation UI
-      console.log("Parsed QR data:", qrData)
-      setStatusMessage(`Scanned payment for ${qrData.amount || 1} MUSD${qrData.memo ? ` (${qrData.memo})` : ''}`)
+      if (!qrData.to || !qrData.amount) {
+        throw new Error("Invalid QR: missing recipient or amount")
+      }
+
+      // Execute on-chain transfer
+      await transfer(qrData.to as `0x${string}`, String(qrData.amount))
+      setStatusMessage(`Sent ${qrData.amount} MUSD to ${qrData.to}`)
       setPaymentStatus('success')
+      toast.success("Payment sent")
     } catch (error) {
       console.error("Failed to parse QR data:", error)
-      setStatusMessage("Invalid QR code format: " + data)
+      setStatusMessage(error instanceof Error ? error.message : "Payment failed")
       setPaymentStatus('error')
+      toast.error("Payment failed")
     }
   }
 
-  const handleManualPayment = (data: { address: string; amount: string; memo: string }) => {
-    // Process the manual payment
-    console.log("Processing manual payment:", data)
-    setStatusMessage(`Payment of ${data.amount} MUSD to ${data.address} successful!`)
-    setPaymentStatus('success')
+  const handleManualPayment = async (data: { address: string; amount: string; memo: string }) => {
+    try {
+      await transfer(data.address as `0x${string}`, data.amount)
+      setStatusMessage(`Payment of ${data.amount} MUSD to ${data.address} successful!`)
+      setPaymentStatus('success')
+      toast.success("Payment sent")
+    } catch (e: any) {
+      setStatusMessage(e?.message || "Payment failed")
+      setPaymentStatus('error')
+      toast.error("Payment failed")
+    }
   }
 
   const resetStatus = () => {
@@ -139,10 +157,14 @@ export default function PayPage() {
                   onClick={() => setIsQrModalOpen(true)}
                   size="lg"
                   className="w-full bg-linear-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-primary-foreground font-medium shadow-md hover:shadow-lg transition-all duration-200 gap-2 py-6"
+                  disabled={!isConnected}
                 >
                   <QrCode className="h-5 w-5" />
                   Generate QR Code
                 </Button>
+                {!isConnected && (
+                  <p className="text-xs text-red-500 mt-2">Connect your wallet to include your address in the QR.</p>
+                )}
               </Card>
             </div>
 

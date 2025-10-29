@@ -2,6 +2,7 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Copy, Check } from "lucide-react"
 import QRCode from "react-qr-code"
+import { useAccount } from "wagmi"
 
 interface QrPreviewProps {
   amount: string
@@ -10,17 +11,23 @@ interface QrPreviewProps {
 
 export function QrPreview({ amount, memo }: QrPreviewProps) {
   const [copied, setCopied] = useState(false)
+  const { address } = useAccount()
   // Create a simpler QR code that will be easier for scanners to read
   const paymentData = {
     amount,
     memo: memo || "",
+    to: address || "",
     timestamp: new Date().toISOString(),
     currency: "MUSD"
   }
   
   // Use a simpler format that's easier to scan
-  // Standard crypto URI format: musd:amount?amount=100&memo=Payment
-  const qrValue = `musd:pay?amount=${amount}${memo ? `&memo=${encodeURIComponent(memo)}` : ""}`
+  // Build params safely to avoid empty to=
+  const params = new URLSearchParams()
+  if (address) params.set("to", address)
+  params.set("amount", amount)
+  if (memo) params.set("memo", memo)
+  const qrValue = `musd:pay?${params.toString()}`
 
   const handleCopy = () => {
     navigator.clipboard.writeText(qrValue)
