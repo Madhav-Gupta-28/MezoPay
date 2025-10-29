@@ -22,12 +22,31 @@ export function RedeemModal({ isOpen, onClose, lockedBtc, musdDebt }: RedeemModa
   const { redeem, isPending, isConfirming, isConfirmed, error, hash } = useRedeem()
   const { isConnected } = useAccount()
  
+  // Protocol constants
+  const GAS_COMP = 200
+  const MIN_NET_DEBT = 1800
+
   const btcToReceive = useMemo(() => {
     if (!musdRepay) return 0
     const repay = Number.parseFloat(musdRepay)
     if (repay <= 0) return 0
     return repay / (musdDebt / lockedBtc)
   }, [musdRepay, musdDebt, lockedBtc])
+
+  // Compute valid repay ranges
+  const { netDebt, maxPartialRepay, fullCloseRepay, invalidPartial } = useMemo(() => {
+    const net = Math.max(0, musdDebt - GAS_COMP)
+    const maxPartial = Math.max(0, net - MIN_NET_DEBT) // repay <= this keeps trove open
+    const fullClose = net // repay >= this fully closes
+    const repayNum = Number.parseFloat(musdRepay || "0")
+    const invalid = repayNum > 0 && repayNum < fullClose && repayNum > maxPartial
+    return {
+      netDebt: net,
+      maxPartialRepay: maxPartial,
+      fullCloseRepay: fullClose,
+      invalidPartial: invalid,
+    }
+  }, [musdDebt, GAS_COMP, MIN_NET_DEBT, musdRepay])
 
   if (!isOpen) return null
 
@@ -87,7 +106,15 @@ export function RedeemModal({ isOpen, onClose, lockedBtc, musdDebt }: RedeemModa
                 placeholder="0.00"
                 className="mt-2 border-border/50 focus:border-primary/50"
               />
-              <p className="text-xs text-muted-foreground mt-2">Total debt: {musdDebt.toFixed(2)} MUSD</p>
+              <div className="mt-2 space-y-1">
+                <p className="text-xs text-muted-foreground">Total debt: {musdDebt.toFixed(2)} MUSD</p>
+                <p className={`text-xs ${invalidPartial ? "text-red-500" : "text-muted-foreground"}`}>
+                  Repay ≤ {maxPartialRepay.toFixed(2)} MUSD to keep trove open, or repay ≥ {fullCloseRepay.toFixed(2)} MUSD to fully close.
+                </p>
+                {invalidPartial && (
+                  <p className="text-xs text-red-500">This amount would leave remaining debt below {MIN_NET_DEBT} MUSD.</p>
+                )}
+              </div>
             </div>
 
             {/* BTC to Receive */}
@@ -128,7 +155,7 @@ export function RedeemModal({ isOpen, onClose, lockedBtc, musdDebt }: RedeemModa
             </Button>
             <Button
               onClick={handleRedeem}
-              disabled={!musdRepay || Number.parseFloat(musdRepay) <= 0 || isPending || isConfirming}
+              disabled={!musdRepay || Number.parseFloat(musdRepay) <= 0 || isPending || isConfirming || invalidPartial}
               className="flex-1 bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-primary-foreground font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isPending || isConfirming ? (
