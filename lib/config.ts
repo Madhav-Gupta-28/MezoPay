@@ -75,5 +75,4 @@ export const config = createConfig({
   transports: {
     [mezoTestnet.id]: http()
   },
-  connectors
 });
