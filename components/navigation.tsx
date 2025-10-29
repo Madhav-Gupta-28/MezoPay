@@ -43,12 +43,12 @@ export function Navigation() {
             >
               Activity
             </Link>
-            <Link
+            {/* <Link
               href="#help"
               className="text-sm font-medium text-foreground/70 hover:text-primary transition-colors duration-200"
             >
               Help
-            </Link>
+            </Link> */}
           </div>
 
           {/* Actions */}

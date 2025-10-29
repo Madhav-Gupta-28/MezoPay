@@ -17,6 +17,7 @@ import { useRouter } from "next/navigation"
 
 export default function Home() {
   const [qrAmount, setQrAmount] = useState("100")
+  const [qrMemo, setQrMemo] = useState("")
   const { isConnected, balance } = useWallet()
   const router = useRouter()
   return (
@@ -204,6 +205,8 @@ export default function Home() {
                   <Input
                     id="memo"
                     type="text"
+                    value={qrMemo}
+                    onChange={(e) => setQrMemo(e.target.value)}
                     placeholder="Payment for..."
                     className="mt-2 border-border/50 focus:border-primary/50 transition-colors"
                   />
@@ -212,7 +215,7 @@ export default function Home() {
             </div>
 
             {/* QR Preview */}
-            <QrPreview amount={qrAmount} memo="Payment for services" />
+            <QrPreview amount={qrAmount} memo={qrMemo} />
           </div>
 
           <div className="mt-12 p-6 bg-linear-to-r from-primary/5 to-primary/0 rounded-xl border border-primary/20">

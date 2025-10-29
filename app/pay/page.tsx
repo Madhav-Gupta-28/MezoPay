@@ -7,12 +7,81 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card } from "@/components/ui/card"
-import { ScanLine, QrCode, Send } from "lucide-react"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { ScanLine, QrCode, Send, CreditCard, AlertCircle, Check } from "lucide-react"
+import { QrScannerComponent } from "@/components/qr-scanner"
+import { ManualPay } from "@/components/manual-pay"
 
 export default function PayPage() {
   const [amount, setAmount] = useState("100")
   const [memo, setMemo] = useState("")
   const [isQrModalOpen, setIsQrModalOpen] = useState(false)
+  const [scanResult, setScanResult] = useState<string | null>(null)
+  const [paymentStatus, setPaymentStatus] = useState<'idle' | 'success' | 'error'>('idle')
+  const [statusMessage, setStatusMessage] = useState("")
+
+  const handleScan = (data: string) => {
+    console.log("Scan result received:", data)
+    setScanResult(data)
+    try {
+      // Parse the QR code data
+      let qrData;
+      
+      if (data.startsWith("musd:pay?amount=")) {
+        // Our simpler format
+        const url = new URL(data.replace("musd:pay", "https://example.com"));
+        qrData = {
+          amount: url.searchParams.get("amount") || "0",
+          memo: url.searchParams.get("memo") || ""
+        }
+      } else if (data.startsWith("musd:pay?data=")) {
+        // Our legacy format
+        qrData = JSON.parse(decodeURIComponent(data.replace("musd:pay?data=", "")))
+      } else if (data.startsWith("bitcoin:") || data.startsWith("musd:")) {
+        // Standard cryptocurrency URI format
+        const url = new URL(data);
+        qrData = {
+          amount: url.searchParams.get("amount") || "1",
+          memo: url.searchParams.get("message") || "",
+          address: data.split(":")[1].split("?")[0]
+        }
+      } else {
+        // Try to parse as JSON
+        try {
+          qrData = JSON.parse(data);
+        } catch {
+          // Assume it's just an address
+          qrData = { 
+            amount: "1", 
+            memo: "Payment to address", 
+            address: data 
+          }
+        }
+      }
+      
+      // Show payment confirmation UI
+      console.log("Parsed QR data:", qrData)
+      setStatusMessage(`Scanned payment for ${qrData.amount || 1} MUSD${qrData.memo ? ` (${qrData.memo})` : ''}`)
+      setPaymentStatus('success')
+    } catch (error) {
+      console.error("Failed to parse QR data:", error)
+      setStatusMessage("Invalid QR code format: " + data)
+      setPaymentStatus('error')
+    }
+  }
+
+  const handleManualPayment = (data: { address: string; amount: string; memo: string }) => {
+    // Process the manual payment
+    console.log("Processing manual payment:", data)
+    setStatusMessage(`Payment of ${data.amount} MUSD to ${data.address} successful!`)
+    setPaymentStatus('success')
+  }
+
+  const resetStatus = () => {
+    setPaymentStatus('idle')
+    setStatusMessage("")
+    setScanResult(null)
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -60,7 +129,7 @@ export default function PayPage() {
                   />
                 </div>
 
-                <div className="p-4 bg-gradient-to-br from-primary/10 to-primary/5 rounded-lg border border-primary/20">
+                <div className="p-4 bg-linear-to-br from-primary/10 to-primary/5 rounded-lg border border-primary/20">
                   <p className="text-sm text-muted-foreground">
                     <span className="font-semibold text-foreground">Total Amount:</span> {amount} MUSD
                   </p>
@@ -69,7 +138,7 @@ export default function PayPage() {
                 <Button
                   onClick={() => setIsQrModalOpen(true)}
                   size="lg"
-                  className="w-full bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-primary-foreground font-medium shadow-md hover:shadow-lg transition-all duration-200 gap-2 py-6"
+                  className="w-full bg-linear-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-primary-foreground font-medium shadow-md hover:shadow-lg transition-all duration-200 gap-2 py-6"
                 >
                   <QrCode className="h-5 w-5" />
                   Generate QR Code
@@ -99,37 +168,70 @@ export default function PayPage() {
             </div>
           </div>
 
-          {/* Scan Section */}
+          {/* Pay Section with Tabs */}
           <div className="space-y-8">
             <div>
-              <h2 className="text-2xl font-bold text-foreground mb-6">Scan to Pay</h2>
-              <Card className="p-8 border-border/50 card-premium space-y-6">
-                <div className="flex flex-col items-center gap-6">
-                  <div className="w-full aspect-square max-w-sm bg-gradient-to-br from-muted to-muted/50 rounded-2xl flex items-center justify-center border-2 border-dashed border-border/50">
-                    <div className="text-center">
-                      <ScanLine className="h-16 w-16 text-muted-foreground mx-auto mb-4 opacity-50" />
-                      <p className="text-muted-foreground font-medium">Scanner frame</p>
-                      <p className="text-sm text-muted-foreground mt-2">Point camera at QR code</p>
-                    </div>
+              <h2 className="text-2xl font-bold text-foreground mb-6">Pay</h2>
+              
+              {paymentStatus !== 'idle' ? (
+                <Card className="p-8 border-border/50 card-premium space-y-6">
+                  <div className="flex flex-col items-center text-center gap-4">
+                    {paymentStatus === 'success' ? (
+                      <>
+                        <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center">
+                          <Check className="h-8 w-8 text-green-500" />
+                        </div>
+                        <h3 className="text-xl font-bold">Payment Successful</h3>
+                      </>
+                    ) : (
+                      <>
+                        <div className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center">
+                          <AlertCircle className="h-8 w-8 text-red-500" />
+                        </div>
+                        <h3 className="text-xl font-bold">Payment Failed</h3>
+                      </>
+                    )}
+                    <p className="text-muted-foreground">{statusMessage}</p>
+                    <Button onClick={resetStatus} className="mt-4">
+                      Back to Payment Options
+                    </Button>
                   </div>
-
-                  <Button
-                    size="lg"
-                    variant="outline"
-                    className="w-full border-border/50 hover:border-primary/30 hover:bg-primary/5 gap-2 py-6 font-medium bg-transparent"
-                  >
-                    <ScanLine className="h-5 w-5" />
-                    Open Camera
-                  </Button>
-                </div>
-
-                <div className="p-4 bg-gradient-to-br from-primary/10 to-primary/5 rounded-lg border border-primary/20">
-                  <p className="text-sm text-muted-foreground">
-                    <span className="font-semibold text-foreground">Tip:</span> Scan any MUSD payment QR code to pay
-                    instantly
-                  </p>
-                </div>
-              </Card>
+                </Card>
+              ) : (
+                <Tabs defaultValue="scan" className="w-full">
+                  <TabsList className="grid grid-cols-2 mb-6">
+                    <TabsTrigger value="scan" className="text-base py-3">
+                      <ScanLine className="h-4 w-4 mr-2" />
+                      Scan QR
+                    </TabsTrigger>
+                    <TabsTrigger value="manual" className="text-base py-3">
+                      <CreditCard className="h-4 w-4 mr-2" />
+                      Pay to Address
+                    </TabsTrigger>
+                  </TabsList>
+                  
+                  <TabsContent value="scan" className="mt-0">
+                    <Card className="border-border/50 card-premium">
+                      <div className="p-6">
+                        <QrScannerComponent 
+                          onScan={handleScan}
+                          onError={(err) => console.error("Scanner error:", err)}
+                        />
+                        
+                        <div className="mt-4 p-4 bg-linear-to-br from-primary/10 to-primary/5 rounded-lg border border-primary/20">
+                          <p className="text-sm text-muted-foreground">
+                            <span className="font-semibold text-foreground">Tip:</span> Scan any MUSD payment QR code to pay instantly
+                          </p>
+                        </div>
+                      </div>
+                    </Card>
+                  </TabsContent>
+                  
+                  <TabsContent value="manual" className="mt-0">
+                    <ManualPay onSubmit={handleManualPayment} />
+                  </TabsContent>
+                </Tabs>
+              )}
             </div>
           </div>
         </div>
