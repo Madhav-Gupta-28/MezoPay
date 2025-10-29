@@ -1,19 +1,23 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card } from "@/components/ui/card"
 import { X, Loader2, Plane, Home, ShoppingCart, Gamepad2, Car, Utensils, Landmark, Plus } from "lucide-react"
 import { useMintMusd } from "@/hooks/useMintMusd"
-import { useAccount } from "wagmi"
+import { useAccount, useBalance } from "wagmi"
 import { toast } from "sonner"
+import { mezoTestnet } from "@/lib/config"
 
 interface CreatePocketModalProps {
   isOpen: boolean
   onClose: () => void
 }
+
+// Constants
+const MIN_MUSD_MINT_VALUE = 1800;
 
 // Define preset pocket options
 const POCKET_PRESETS = [
@@ -34,7 +38,19 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
   const [btcAmount, setBtcAmount] = useState("")
   const [musdAmount, setMusdAmount] = useState("")
   const [step, setStep] = useState(1)
-  const { isConnected } = useAccount()
+  
+  // Get account and balance information
+  const { address, isConnected } = useAccount()
+  const { data: balanceData, isLoading: isBalanceLoading } = useBalance({
+    address,
+    chainId: mezoTestnet.id,
+  })
+  
+  // Parse balance to number, default to 0 if unavailable
+  const availableBtcBalance = balanceData?.formatted 
+    ? parseFloat(balanceData.formatted) 
+    : 0
+    
   const { mintMusd, isPending, isConfirming, isConfirmed, error } = useMintMusd()
   
   const selectPreset = (preset: typeof POCKET_PRESETS[number]) => {
@@ -50,6 +66,37 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
 
   if (!isOpen) return null
 
+  // Calculate the minimum BTC amount needed for the minimum MUSD
+  const getBtcEquivalent = (musdAmount: number) => {
+    // At 150% collateralization, 1 BTC = 67000 USD / 1.5 ≈ 44,666 MUSD
+    // So for 1800 MUSD, we need 1800 * 1.5 / 67000 BTC ≈ 0.04 BTC
+    return (musdAmount * 1.5) / 67000;
+  }
+
+  // Calculate max MUSD that can be minted from BTC
+  const getMaxMusd = (btcAmount: number) => {
+    return (btcAmount * 67000) / 1.5;
+  }
+
+  // Validation checks for each step
+  const isStep1Valid = () => pocketName.trim() !== ""
+  
+  const isStep2Valid = () => {
+    // Require enough BTC to mint at least the minimum MUSD
+    const minBtcRequired = getBtcEquivalent(MIN_MUSD_MINT_VALUE);
+    return btcAmount && parseFloat(btcAmount) >= minBtcRequired;
+  }
+  
+  const isStep3Valid = () => {
+    if (!isConnected || isPending || isConfirming) return false;
+    
+    const musdValue = musdAmount && parseFloat(musdAmount) > 0 
+      ? parseFloat(musdAmount) 
+      : getMaxMusd(parseFloat(btcAmount || "0"));
+      
+    return musdValue >= MIN_MUSD_MINT_VALUE;
+  }
+  
   const handleNext = () => {
     if (step < 3) setStep(step + 1)
   }
@@ -71,16 +118,24 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
     }
 
     // If user didn't specify mUSD, derive it at 150% collateralization
-    const derivedMusd = musdAmount && parseFloat(musdAmount) > 0
+    let derivedMusd = musdAmount && parseFloat(musdAmount) > 0
       ? musdAmount
-      : ((Number.parseFloat(btcAmount) * 67000) / 1.5).toFixed(2)
+      : getMaxMusd(parseFloat(btcAmount)).toFixed(2)
+      
+    // Ensure minimum MUSD amount
+    if (parseFloat(derivedMusd) < MIN_MUSD_MINT_VALUE) {
+      toast.error(`Minimum MUSD mint value is ${MIN_MUSD_MINT_VALUE}`)
+      return
+    }
 
     try {
+      // Store pocket data (we might need a separate API call for this in a real implementation)
+      const pocketEmoji = customMode ? "💰" : selectedEmoji;
+      console.log(`Creating pocket: ${pocketName} with emoji ${pocketEmoji}`);
+      
       await mintMusd({
         btcCollateral: btcAmount,
-        musdToMint: derivedMusd,
-        pocketName,
-        emoji: customMode ? "💰" : selectedEmoji // Use default emoji for custom pockets
+        musdToMint: derivedMusd
       })
 
       toast.success(`${pocketName} pocket created`)
@@ -187,8 +242,11 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
                     Deposit BTC
                   </Label>
                   <div className="text-xs text-muted-foreground">
-                    Available: 0.5 BTC
+                    Available: {isBalanceLoading ? '...' : availableBtcBalance.toFixed(4)} BTC
                   </div>
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  <span className="font-medium">Min required:</span> {getBtcEquivalent(MIN_MUSD_MINT_VALUE).toFixed(4)} BTC (for {MIN_MUSD_MINT_VALUE} MUSD)
                 </div>
                 <div className="relative mt-2">
                   <Input
@@ -205,7 +263,12 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
                       type="button"
                       variant="ghost"
                       size="sm"
-                      onClick={() => setBtcAmount((0.5 * 0.25).toFixed(4))}
+                      onClick={() => {
+                        // Ensure the amount is enough for minimum MUSD
+                        const minBtc = getBtcEquivalent(MIN_MUSD_MINT_VALUE);
+                        const amount = Math.max(availableBtcBalance * 0.25, minBtc);
+                        setBtcAmount(amount.toFixed(4));
+                      }}
                       className="h-7 px-2 text-xs hover:bg-primary/10 hover:text-primary"
                     >
                       25%
@@ -214,7 +277,12 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
                       type="button"
                       variant="ghost"
                       size="sm"
-                      onClick={() => setBtcAmount((0.5 * 0.5).toFixed(4))}
+                      onClick={() => {
+                        const available = availableBtcBalance;
+                        const minBtc = getBtcEquivalent(MIN_MUSD_MINT_VALUE);
+                        const amount = Math.max(available * 0.5, minBtc);
+                        setBtcAmount(amount.toFixed(4));
+                      }}
                       className="h-7 px-2 text-xs hover:bg-primary/10 hover:text-primary"
                     >
                       50%
@@ -223,7 +291,7 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
                       type="button"
                       variant="ghost"
                       size="sm"
-                      onClick={() => setBtcAmount("0.5")}
+                      onClick={() => setBtcAmount(availableBtcBalance.toFixed(4))}
                       className="h-7 px-2 text-xs hover:bg-primary/10 hover:text-primary font-semibold"
                     >
                       MAX
@@ -249,8 +317,11 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
                     Mint MUSD
                   </Label>
                   <div className="text-xs text-muted-foreground">
-                    Max available: {btcAmount ? (Number.parseFloat(btcAmount) * 50000).toFixed(2) : "0.00"} MUSD
+                    Max available: {btcAmount ? getMaxMusd(Number.parseFloat(btcAmount)).toFixed(2) : "0.00"} MUSD
                   </div>
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  <span className="font-medium">Minimum mint:</span> {MIN_MUSD_MINT_VALUE} MUSD
                 </div>
                 <div className="relative mt-2">
                   <Input
@@ -267,9 +338,10 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
                         type="button"
                         variant="ghost"
                         size="sm"
-                        onClick={() => {
-                          const maxAmount = Number.parseFloat(btcAmount) * 50000;
-                          setMusdAmount((maxAmount * 0.25).toFixed(2));
+                          onClick={() => {
+                          const maxAmount = getMaxMusd(Number.parseFloat(btcAmount));
+                          const amount = Math.max(maxAmount * 0.25, MIN_MUSD_MINT_VALUE);
+                          setMusdAmount(amount.toFixed(2));
                         }}
                         className="h-7 px-2 text-xs hover:bg-primary/10 hover:text-primary"
                       >
@@ -280,8 +352,9 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
                         variant="ghost"
                         size="sm"
                         onClick={() => {
-                          const maxAmount = Number.parseFloat(btcAmount) * 50000;
-                          setMusdAmount((maxAmount * 0.5).toFixed(2));
+                          const maxAmount = getMaxMusd(Number.parseFloat(btcAmount));
+                          const amount = Math.max(maxAmount * 0.5, MIN_MUSD_MINT_VALUE);
+                          setMusdAmount(amount.toFixed(2));
                         }}
                         className="h-7 px-2 text-xs hover:bg-primary/10 hover:text-primary"
                       >
@@ -292,7 +365,7 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
                         variant="ghost"
                         size="sm"
                         onClick={() => {
-                          const maxAmount = Number.parseFloat(btcAmount) * 50000;
+                          const maxAmount = getMaxMusd(Number.parseFloat(btcAmount));
                           setMusdAmount(maxAmount.toFixed(2));
                         }}
                         className="h-7 px-2 text-xs hover:bg-primary/10 hover:text-primary font-semibold"
@@ -327,7 +400,11 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
             <Button
               onClick={step === 3 ? handleCreate : handleNext}
               className="flex-1 bg-linear-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-primary-foreground font-medium"
-              disabled={(step === 3 && (!isConnected || isPending || isConfirming))}
+              disabled={
+                (step === 1 && !isStep1Valid()) ||
+                (step === 2 && !isStep2Valid()) ||
+                (step === 3 && !isStep3Valid())
+              }
             >
               {step === 3 ? (
                 isPending || isConfirming ? (
