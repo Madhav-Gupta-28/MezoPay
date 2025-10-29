@@ -13,11 +13,12 @@ import { Label } from "@/components/ui/label"
 import { Card } from "@/components/ui/card"
 import { Wallet, QrCode, ArrowUpRight, Shield, Coins, ScanLine, Zap } from "lucide-react"
 import { useWallet } from "@/hooks/use-wallet"
+import { useRouter } from "next/navigation"
 
 export default function Home() {
   const [qrAmount, setQrAmount] = useState("100")
   const { isConnected, balance } = useWallet()
-
+  const router = useRouter()
   return (
     <div className="min-h-screen bg-background">
       <Navigation />
@@ -49,6 +50,7 @@ export default function Home() {
                 <Button
                   size="lg"
                   variant="outline"
+                  onClick={() => router.push('/deposit')}
                   className="border-border/50 hover:border-primary/30 hover:bg-primary/5 transition-all duration-200 bg-transparent"
                 >
                   Deposit BTC
@@ -56,6 +58,7 @@ export default function Home() {
                 <Button
                   size="lg"
                   variant="outline"
+                  onClick={() => router.push('/pay')}
                   className="gap-2 border-border/50 hover:border-primary/30 hover:bg-primary/5 transition-all duration-200 bg-transparent"
                 >
                   <ScanLine className="h-4 w-4" />

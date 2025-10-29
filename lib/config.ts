@@ -33,6 +33,32 @@ export const mezoTestnet: Chain = {
   testnet: true
 };
 
+
+
+export const mezoMainnet: Chain = {
+  id: 31612,
+  name: 'Mezo Testnet',
+  nativeCurrency: {
+    name: 'Mezo',
+    symbol: 'BTC',
+    decimals: 18
+  },
+  rpcUrls: {
+    default: {
+      http: ['https://rpc-http.mezo.boar.network']
+    },
+    public: {
+      http: ['https://rpc-http.mezo.boar.network']
+    }
+  },
+  blockExplorers: {
+    default: {
+      name: 'MezoScan',
+      url: 'https://explorer.mezo.org/'
+    }
+  },
+  testnet: true
+};
 const { wallets } = getDefaultWallets({
   appName: APP_NAME,
   projectId: PROJECT_ID,
@@ -43,7 +69,7 @@ const connectors = connectorsForWallets(wallets, {
   appName: APP_NAME,
 });
 
-// Create the Wagmi config
+
 export const config = createConfig({
   chains: [mezoTestnet],
   transports: {
