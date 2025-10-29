@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card } from "@/components/ui/card"
-import { X, Loader2 } from "lucide-react"
+import { X, Loader2, Plane, Home, ShoppingCart, Gamepad2, Car, Utensils, Landmark, Plus } from "lucide-react"
 import { useMintMusd } from "@/hooks/useMintMusd"
 import { useAccount } from "wagmi"
 import { toast } from "sonner"
@@ -15,13 +15,38 @@ interface CreatePocketModalProps {
   onClose: () => void
 }
 
+// Define preset pocket options
+const POCKET_PRESETS = [
+  { name: "Travel", emoji: "✈️", icon: Plane },
+  { name: "Rent", emoji: "🏠", icon: Home },
+  { name: "Groceries", emoji: "🛒", icon: ShoppingCart },
+  { name: "Gaming", emoji: "🎮", icon: Gamepad2 },
+  { name: "Transportation", emoji: "🚗", icon: Car },
+  { name: "Dining", emoji: "🍽️", icon: Utensils },
+  { name: "Savings", emoji: "🏦", icon: Landmark },
+  { name: "Custom", emoji: "➕", icon: Plus }
+]
+
 export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
   const [pocketName, setPocketName] = useState("")
+  const [selectedEmoji, setSelectedEmoji] = useState("✈️")
+  const [customMode, setCustomMode] = useState(false)
   const [btcAmount, setBtcAmount] = useState("")
   const [musdAmount, setMusdAmount] = useState("")
   const [step, setStep] = useState(1)
   const { isConnected } = useAccount()
   const { mintMusd, isPending, isConfirming, isConfirmed, error } = useMintMusd()
+  
+  const selectPreset = (preset: typeof POCKET_PRESETS[number]) => {
+    if (preset.name === "Custom") {
+      setCustomMode(true)
+      setPocketName("")
+    } else {
+      setCustomMode(false)
+      setPocketName(preset.name)
+      setSelectedEmoji(preset.emoji)
+    }
+  }
 
   if (!isOpen) return null
 
@@ -32,6 +57,11 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
   const handleCreate = async () => {
     if (!isConnected) {
       toast.error("Please connect your wallet first")
+      return
+    }
+
+    if (!pocketName || pocketName.trim() === "") {
+      toast.error("Please enter a pocket name")
       return
     }
 
@@ -49,12 +79,16 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
       await mintMusd({
         btcCollateral: btcAmount,
         musdToMint: derivedMusd,
+        pocketName,
+        emoji: customMode ? "💰" : selectedEmoji // Use default emoji for custom pockets
       })
 
-      toast.success("Pocket created & mUSD minted")
+      toast.success(`${pocketName} pocket created`)
       onClose()
       setStep(1)
       setPocketName("")
+      setSelectedEmoji("✈️")
+      setCustomMode(false)
       setBtcAmount("")
       setMusdAmount("")
     } catch (e: any) {
@@ -88,16 +122,55 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
           {step === 1 && (
             <div className="space-y-6">
               <div>
-                <Label htmlFor="pocket-name" className="font-semibold text-foreground">
-                  Pocket Name
+                <Label className="font-semibold text-foreground mb-2 block">
+                  Select Pocket Type
                 </Label>
-                <Input
-                  id="pocket-name"
-                  value={pocketName}
-                  onChange={(e) => setPocketName(e.target.value)}
-                  placeholder="e.g., Travel, Rent, Groceries"
-                  className="mt-2 border-border/50 focus:border-primary/50"
-                />
+                
+                {/* Pocket presets */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                  {POCKET_PRESETS.map((preset) => (
+                    <button
+                      key={preset.name}
+                      onClick={() => selectPreset(preset)}
+                      className={`flex flex-col items-center gap-2 p-4 rounded-lg transition-all duration-200
+                        ${pocketName === preset.name || (preset.name === "Custom" && customMode)
+                          ? "bg-primary/10 border border-primary/30" 
+                          : "bg-muted/30 border border-border/50 hover:border-primary/20 hover:bg-primary/5"
+                        }`}
+                      type="button"
+                    >
+                      <span className="text-2xl">
+                        {preset.emoji}
+                      </span>
+                      <span className="text-xs font-medium">
+                        {preset.name}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                
+                {/* Custom name input (shown always or when custom selected) */}
+                {(customMode || pocketName) && (
+                  <div>
+                    <Label htmlFor="pocket-name" className="font-semibold text-foreground">
+                      {customMode ? "Custom Pocket Name" : "Pocket Name"}
+                    </Label>
+                    <div className="relative mt-2">
+                      {!customMode && (
+                        <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-lg">
+                          {selectedEmoji}
+                        </div>
+                      )}
+                      <Input
+                        id="pocket-name"
+                        value={pocketName}
+                        onChange={(e) => setPocketName(e.target.value)}
+                        placeholder={customMode ? "Enter custom pocket name" : pocketName}
+                        className={`border-border/50 focus:border-primary/50 ${!customMode ? "pl-10" : ""}`}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
               <p className="text-sm text-muted-foreground">
                 Give your pocket a memorable name to organize your spending
@@ -109,19 +182,54 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
           {step === 2 && (
             <div className="space-y-6">
               <div>
-                <Label htmlFor="btc-amount" className="font-semibold text-foreground">
-                  Deposit BTC
-                </Label>
-                <Input
-                  id="btc-amount"
-                  type="number"
-                  value={btcAmount}
-                  onChange={(e) => setBtcAmount(e.target.value)}
-                  placeholder="0.00"
-                  step="0.0001"
-                  className="mt-2 border-border/50 focus:border-primary/50"
-                />
-                <p className="text-xs text-muted-foreground mt-2">Available: 0.5 BTC</p>
+                <div className="flex justify-between">
+                  <Label htmlFor="btc-amount" className="font-semibold text-foreground">
+                    Deposit BTC
+                  </Label>
+                  <div className="text-xs text-muted-foreground">
+                    Available: 0.5 BTC
+                  </div>
+                </div>
+                <div className="relative mt-2">
+                  <Input
+                    id="btc-amount"
+                    type="number"
+                    value={btcAmount}
+                    onChange={(e) => setBtcAmount(e.target.value)}
+                    placeholder="0.00"
+                    step="0.0001"
+                    className="border-border/50 focus:border-primary/50 pr-[180px]"
+                  />
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setBtcAmount((0.5 * 0.25).toFixed(4))}
+                      className="h-7 px-2 text-xs hover:bg-primary/10 hover:text-primary"
+                    >
+                      25%
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setBtcAmount((0.5 * 0.5).toFixed(4))}
+                      className="h-7 px-2 text-xs hover:bg-primary/10 hover:text-primary"
+                    >
+                      50%
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setBtcAmount("0.5")}
+                      className="h-7 px-2 text-xs hover:bg-primary/10 hover:text-primary font-semibold"
+                    >
+                      MAX
+                    </Button>
+                  </div>
+                </div>
               </div>
               <div className="p-4 bg-primary/5 rounded-lg border border-primary/20">
                 <p className="text-sm text-muted-foreground">
@@ -136,20 +244,64 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
           {step === 3 && (
             <div className="space-y-6">
               <div>
-                <Label htmlFor="musd-amount" className="font-semibold text-foreground">
-                  Mint MUSD
-                </Label>
-                <Input
-                  id="musd-amount"
-                  type="number"
-                  value={musdAmount}
-                  onChange={(e) => setMusdAmount(e.target.value)}
-                  placeholder="0.00"
-                  className="mt-2 border-border/50 focus:border-primary/50"
-                />
-                <p className="text-xs text-muted-foreground mt-2">
-                  Max available: {btcAmount ? (Number.parseFloat(btcAmount) * 50000).toFixed(2) : "0.00"} MUSD
-                </p>
+                <div className="flex justify-between">
+                  <Label htmlFor="musd-amount" className="font-semibold text-foreground">
+                    Mint MUSD
+                  </Label>
+                  <div className="text-xs text-muted-foreground">
+                    Max available: {btcAmount ? (Number.parseFloat(btcAmount) * 50000).toFixed(2) : "0.00"} MUSD
+                  </div>
+                </div>
+                <div className="relative mt-2">
+                  <Input
+                    id="musd-amount"
+                    type="number"
+                    value={musdAmount}
+                    onChange={(e) => setMusdAmount(e.target.value)}
+                    placeholder="0.00"
+                    className="border-border/50 focus:border-primary/50 pr-[180px]"
+                  />
+                  {btcAmount && Number.parseFloat(btcAmount) > 0 && (
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          const maxAmount = Number.parseFloat(btcAmount) * 50000;
+                          setMusdAmount((maxAmount * 0.25).toFixed(2));
+                        }}
+                        className="h-7 px-2 text-xs hover:bg-primary/10 hover:text-primary"
+                      >
+                        25%
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          const maxAmount = Number.parseFloat(btcAmount) * 50000;
+                          setMusdAmount((maxAmount * 0.5).toFixed(2));
+                        }}
+                        className="h-7 px-2 text-xs hover:bg-primary/10 hover:text-primary"
+                      >
+                        50%
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          const maxAmount = Number.parseFloat(btcAmount) * 50000;
+                          setMusdAmount(maxAmount.toFixed(2));
+                        }}
+                        className="h-7 px-2 text-xs hover:bg-primary/10 hover:text-primary font-semibold"
+                      >
+                        MAX
+                      </Button>
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="p-4 bg-primary/5 rounded-lg border border-primary/20 space-y-2">
                 <p className="text-sm text-muted-foreground">
@@ -174,7 +326,7 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
             </Button>
             <Button
               onClick={step === 3 ? handleCreate : handleNext}
-              className="flex-1 bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-primary-foreground font-medium"
+              className="flex-1 bg-linear-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-primary-foreground font-medium"
               disabled={(step === 3 && (!isConnected || isPending || isConfirming))}
             >
               {step === 3 ? (

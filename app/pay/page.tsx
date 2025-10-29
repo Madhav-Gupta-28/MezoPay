@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Navigation } from "@/components/navigation"
 import { QrModal } from "@/components/modals/qr-modal"
 import { Button } from "@/components/ui/button"
