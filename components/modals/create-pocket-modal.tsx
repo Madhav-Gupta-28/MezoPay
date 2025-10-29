@@ -5,7 +5,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card } from "@/components/ui/card"
-import { X } from "lucide-react"
+import { X, Loader2 } from "lucide-react"
+import { useMintMusd } from "@/hooks/useMintMusd"
+import { useAccount } from "wagmi"
+import { toast } from "sonner"
 
 interface CreatePocketModalProps {
   isOpen: boolean
@@ -17,6 +20,8 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
   const [btcAmount, setBtcAmount] = useState("")
   const [musdAmount, setMusdAmount] = useState("")
   const [step, setStep] = useState(1)
+  const { isConnected } = useAccount()
+  const { mintMusd, isPending, isConfirming, isConfirmed, error } = useMintMusd()
 
   if (!isOpen) return null
 
@@ -24,13 +29,37 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
     if (step < 3) setStep(step + 1)
   }
 
-  const handleCreate = () => {
-    // Handle pocket creation
-    onClose()
-    setStep(1)
-    setPocketName("")
-    setBtcAmount("")
-    setMusdAmount("")
+  const handleCreate = async () => {
+    if (!isConnected) {
+      toast.error("Please connect your wallet first")
+      return
+    }
+
+    if (!btcAmount || parseFloat(btcAmount) <= 0) {
+      toast.error("Enter a valid BTC amount")
+      return
+    }
+
+    // If user didn't specify mUSD, derive it at 150% collateralization
+    const derivedMusd = musdAmount && parseFloat(musdAmount) > 0
+      ? musdAmount
+      : ((Number.parseFloat(btcAmount) * 67000) / 1.5).toFixed(2)
+
+    try {
+      await mintMusd({
+        btcCollateral: btcAmount,
+        musdToMint: derivedMusd,
+      })
+
+      toast.success("Pocket created & mUSD minted")
+      onClose()
+      setStep(1)
+      setPocketName("")
+      setBtcAmount("")
+      setMusdAmount("")
+    } catch (e: any) {
+      toast.error("Mint failed", { description: e?.message?.slice(0, 140) })
+    }
   }
 
   return (
@@ -139,14 +168,27 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
               variant="outline"
               onClick={onClose}
               className="flex-1 border-border/50 hover:border-primary/30 hover:bg-primary/5 bg-transparent"
+              disabled={isPending || isConfirming}
             >
               Cancel
             </Button>
             <Button
               onClick={step === 3 ? handleCreate : handleNext}
               className="flex-1 bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-primary-foreground font-medium"
+              disabled={(step === 3 && (!isConnected || isPending || isConfirming))}
             >
-              {step === 3 ? "Create Pocket" : "Next"}
+              {step === 3 ? (
+                isPending || isConfirming ? (
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Processing...
+                  </span>
+                ) : (
+                  "Create Pocket"
+                )
+              ) : (
+                "Next"
+              )}
             </Button>
           </div>
         </div>
