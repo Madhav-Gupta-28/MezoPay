@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card } from "@/components/ui/card"
-import { X, Loader2, Plane, Home, ShoppingCart, Gamepad2, Car, Utensils, Landmark, Plus } from "lucide-react"
+import { X, Loader2, Plane, Home, ShoppingCart, Gamepad2, Car, Utensils, Landmark, Plus, CheckCircle } from "lucide-react"
 import { useMintMusd } from "@/hooks/useMintMusd"
 import { useAccount, useBalance } from "wagmi"
 import { toast } from "sonner"
@@ -38,6 +38,7 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
   const [btcAmount, setBtcAmount] = useState("")
   const [musdAmount, setMusdAmount] = useState("")
   const [step, setStep] = useState(1)
+  const [txHash, setTxHash] = useState("")
   
   // Get account and balance information
   const { address, isConnected } = useAccount()
@@ -70,7 +71,7 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
   const getBtcEquivalent = (musdAmount: number) => {
     // At 150% collateralization, 1 BTC = 67000 USD / 1.5 ≈ 44,666 MUSD
     // So for 1800 MUSD, we need 1800 * 1.5 / 67000 BTC ≈ 0.04 BTC
-    return (musdAmount * 1.5) / 67000;
+    return (musdAmount * 1.5) / 90000;
   }
 
   // Calculate max MUSD that can be minted from BTC
@@ -78,7 +79,6 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
     return (btcAmount * 67000) / 1.5;
   }
 
-  // Validation checks for each step
   const isStep1Valid = () => pocketName.trim() !== ""
   
   const isStep2Valid = () => {
@@ -90,15 +90,34 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
   const isStep3Valid = () => {
     if (!isConnected || isPending || isConfirming) return false;
     
-    const musdValue = musdAmount && parseFloat(musdAmount) > 0 
-      ? parseFloat(musdAmount) 
-      : getMaxMusd(parseFloat(btcAmount || "0"));
-      
-    return musdValue >= MIN_MUSD_MINT_VALUE;
+    // Require explicit input for MUSD amount
+    if (!musdAmount || musdAmount.trim() === "") {
+      return false;
+    }
+    
+    const musdValue = parseFloat(musdAmount);
+    return !isNaN(musdValue) && musdValue >= MIN_MUSD_MINT_VALUE;
   }
   
+  // Step 4 is the transaction confirmation/success step
+  const isStep4Valid = () => true; // Always valid as it's just showing results
+  
   const handleNext = () => {
-    if (step < 3) setStep(step + 1)
+    // Only advance to next step if valid
+    if (step === 1 && isStep1Valid()) setStep(2);
+    else if (step === 2 && isStep2Valid()) setStep(3);
+    // Step 3 goes to handleCreate which will advance to step 4
+    // Step 4 closes the modal when done
+  }
+  
+  const resetModal = () => {
+    setStep(1);
+    setPocketName("");
+    setSelectedEmoji("✈️");
+    setCustomMode(false);
+    setBtcAmount("");
+    setMusdAmount("");
+    setTxHash("");
   }
 
   const handleCreate = async () => {
@@ -117,10 +136,13 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
       return
     }
 
-    // If user didn't specify mUSD, derive it at 150% collateralization
-    let derivedMusd = musdAmount && parseFloat(musdAmount) > 0
-      ? musdAmount
-      : getMaxMusd(parseFloat(btcAmount)).toFixed(2)
+    // We now require an explicit MUSD amount (per the isStep3Valid check)
+    if (!musdAmount || musdAmount.trim() === "" || isNaN(parseFloat(musdAmount))) {
+      toast.error("Please enter a valid MUSD amount")
+      return
+    }
+    
+    let derivedMusd = musdAmount
       
     // Ensure minimum MUSD amount
     if (parseFloat(derivedMusd) < MIN_MUSD_MINT_VALUE) {
@@ -129,25 +151,32 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
     }
 
     try {
+      setStep(4); // Move to transaction confirmation step
+      
       // Store pocket data (we might need a separate API call for this in a real implementation)
       const pocketEmoji = customMode ? "💰" : selectedEmoji;
       console.log(`Creating pocket: ${pocketName} with emoji ${pocketEmoji}`);
       
-      await mintMusd({
+      // Mint the MUSD (this will trigger wallet popup)
+      const result = await mintMusd({
         btcCollateral: btcAmount,
         musdToMint: derivedMusd
-      })
-
-      toast.success(`${pocketName} pocket created`)
-      onClose()
-      setStep(1)
-      setPocketName("")
-      setSelectedEmoji("✈️")
-      setCustomMode(false)
-      setBtcAmount("")
-      setMusdAmount("")
+      });
+      
+      // Capture tx hash (or any other identifier from the result)
+      // Note: Type casting to any here since we don't know the exact return type of mintMusd
+      const txResult = result as any;
+      if (txResult?.hash) {
+        setTxHash(txResult.hash);
+      }
+      
+      toast.success(`${pocketName} pocket created`);
+      
+      // Don't close modal or reset state here - we'll stay on step 4
     } catch (e: any) {
-      toast.error("Mint failed", { description: e?.message?.slice(0, 140) })
+      toast.error("Mint failed", { description: e?.message?.slice(0, 140) });
+      // Go back to step 3 on error
+      setStep(3);
     }
   }
 
@@ -163,13 +192,19 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
             </button>
           </div>
 
-          {/* Progress */}
+          {/* Progress Steps */}
           <div className="flex gap-2 mb-8">
-            {[1, 2, 3].map((s) => (
-              <div
-                key={s}
-                className={`h-1 flex-1 rounded-full transition-colors ${s <= step ? "bg-primary" : "bg-muted"}`}
-              />
+            {[1, 2, 3, 4].map((s) => (
+              <div key={s} className="flex items-center gap-2">
+                <div
+                  className={`h-10 w-10 rounded-full flex items-center justify-center font-semibold transition-all ${
+                    s <= step ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                  }`}
+                >
+                  {s}
+                </div>
+                {s < 4 && <div className={`h-1 w-8 transition-all ${s < step ? "bg-primary" : "bg-muted"}`} />}
+              </div>
             ))}
           </div>
 
@@ -312,17 +347,24 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
           {step === 3 && (
             <div className="space-y-6">
               <div>
-                <div className="flex justify-between">
-                  <Label htmlFor="musd-amount" className="font-semibold text-foreground">
-                    Mint MUSD
-                  </Label>
-                  <div className="text-xs text-muted-foreground">
-                    Max available: {btcAmount ? getMaxMusd(Number.parseFloat(btcAmount)).toFixed(2) : "0.00"} MUSD
+                  <div className="flex justify-between">
+                    <Label htmlFor="musd-amount" className="font-semibold text-foreground">
+                      Mint MUSD
+                    </Label>
+                    <div className="text-xs text-muted-foreground">
+                      Max available: {btcAmount ? getMaxMusd(Number.parseFloat(btcAmount)).toFixed(2) : "0.00"} MUSD
+                    </div>
                   </div>
-                </div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  <span className="font-medium">Minimum mint:</span> {MIN_MUSD_MINT_VALUE} MUSD
-                </div>
+                  <div className="text-xs text-muted-foreground mt-1 flex justify-between">
+                    <span><span className="font-medium">Minimum mint:</span> {MIN_MUSD_MINT_VALUE} MUSD</span>
+                    <span className="text-primary cursor-pointer" onClick={() => {
+                      const maxMusd = btcAmount ? getMaxMusd(Number.parseFloat(btcAmount)) : 0;
+                      const defaultAmount = Math.max(maxMusd * 0.75, MIN_MUSD_MINT_VALUE);
+                      setMusdAmount(defaultAmount.toFixed(2));
+                    }}>
+                      Suggest amount
+                    </span>
+                  </div>
                 <div className="relative mt-2">
                   <Input
                     id="musd-amount"
@@ -387,38 +429,136 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
             </div>
           )}
 
+          {/* Step 4: Transaction Confirmation */}
+          {step === 4 && (
+            <div className="space-y-6">
+              <div className="flex flex-col items-center py-4">
+                {isPending || isConfirming ? (
+                  <>
+                    <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+                      <Loader2 className="h-8 w-8 text-primary animate-spin" />
+                    </div>
+                    <h3 className="text-xl font-bold text-foreground mb-2">
+                      {isPending ? "Waiting for confirmation" : "Processing transaction"}
+                    </h3>
+                    <p className="text-sm text-muted-foreground text-center max-w-xs">
+                      {isPending 
+                        ? "Please confirm this transaction in your wallet..."
+                        : "Your transaction is being processed on the blockchain..."}
+                    </p>
+                  </>
+                ) : isConfirmed ? (
+                  <>
+                    <div className="w-16 h-16 rounded-full bg-green-500/10 flex items-center justify-center mb-4">
+                      <CheckCircle className="h-8 w-8 text-green-500" />
+                    </div>
+                    <h3 className="text-xl font-bold text-foreground mb-2">Pocket Created!</h3>
+                    <p className="text-sm text-muted-foreground text-center">
+                      Your {pocketName} pocket has been created successfully.
+                    </p>
+
+                    <div className="w-full mt-8 p-4 rounded-lg border border-border/50 bg-muted/30">
+                      <div className="space-y-2">
+                        <div className="flex items-center">
+                          <span className="text-lg mr-3">{selectedEmoji}</span>
+                          <span className="font-bold">{pocketName}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Amount</span>
+                          <span className="font-medium">{musdAmount || getMaxMusd(parseFloat(btcAmount)).toFixed(2)} MUSD</span>
+                        </div>
+                        {txHash && (
+                          <div className="pt-2 mt-2 border-t border-border/50">
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-muted-foreground">Transaction</span>
+                              <a 
+                                href={`https://scan.testnet.mezo.network/tx/${txHash}`} 
+                                target="_blank"
+                                rel="noopener noreferrer" 
+                                className="font-medium text-primary hover:underline"
+                              >
+                                View on Explorer
+                              </a>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  // Error state
+                  <>
+                    <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mb-4">
+                      <X className="h-8 w-8 text-red-500" />
+                    </div>
+                    <h3 className="text-xl font-bold text-foreground mb-2">Transaction Failed</h3>
+                    <p className="text-sm text-red-500 text-center">
+                      There was an error creating your pocket.
+                    </p>
+                    <Button 
+                      onClick={() => setStep(3)} 
+                      variant="outline"
+                      className="mt-4"
+                    >
+                      Try Again
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Actions */}
           <div className="flex gap-3 mt-8">
-            <Button
-              variant="outline"
-              onClick={onClose}
-              className="flex-1 border-border/50 hover:border-primary/30 hover:bg-primary/5 bg-transparent"
-              disabled={isPending || isConfirming}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={step === 3 ? handleCreate : handleNext}
-              className="flex-1 bg-linear-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-primary-foreground font-medium"
-              disabled={
-                (step === 1 && !isStep1Valid()) ||
-                (step === 2 && !isStep2Valid()) ||
-                (step === 3 && !isStep3Valid())
-              }
-            >
-              {step === 3 ? (
-                isPending || isConfirming ? (
-                  <span className="inline-flex items-center gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Processing...
-                  </span>
-                ) : (
-                  "Create Pocket"
-                )
-              ) : (
-                "Next"
-              )}
-            </Button>
+            {step < 4 ? (
+              // Steps 1-3: Show Cancel/Next buttons
+              <>
+                <Button
+                  variant="outline"
+                  onClick={onClose}
+                  className="flex-1 border-border/50 hover:border-primary/30 hover:bg-primary/5 bg-transparent"
+                  disabled={isPending || isConfirming}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={step === 3 ? handleCreate : handleNext}
+                  className="flex-1 bg-linear-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-primary-foreground font-medium"
+                  disabled={
+                    (step === 1 && !isStep1Valid()) ||
+                    (step === 2 && !isStep2Valid()) ||
+                    (step === 3 && !isStep3Valid())
+                  }
+                >
+                  {step === 3 ? (
+                    isPending || isConfirming ? (
+                      <span className="inline-flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Processing...
+                      </span>
+                    ) : (
+                      "Create Pocket"
+                    )
+                  ) : (
+                    "Next"
+                  )}
+                </Button>
+              </>
+            ) : (
+              // Step 4: Show Done button if confirmed, otherwise just Close
+              <Button
+                onClick={() => {
+                  // Close the modal and reset
+                  resetModal();
+                  onClose();
+                }}
+                className="w-full bg-linear-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-primary-foreground font-medium"
+                disabled={isPending || isConfirming}
+              >
+                {isConfirmed ? "Done" : "Close"}
+              </Button>
+            )}
+          
           </div>
         </div>
       </Card>
