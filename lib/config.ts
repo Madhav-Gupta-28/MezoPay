@@ -27,7 +27,7 @@ export const mezoTestnet: Chain = {
   blockExplorers: {
     default: {
       name: 'MezoScan',
-      url: 'https://scan.testnet.mezo.network'
+      url: 'https://explorer.test.mezo.org'
     }
   },
   testnet: true

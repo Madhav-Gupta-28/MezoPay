@@ -467,7 +467,7 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
                             <div className="flex items-center justify-between text-xs">
                               <span className="text-muted-foreground">Transaction</span>
                               <a 
-                                href={`https://scan.testnet.mezo.network/tx/${hash}`} 
+                                href={`https://explorer.test.mezo.org/tx/${hash}`} 
                                 target="_blank"
                                 rel="noopener noreferrer" 
                                 className="font-medium text-primary hover:underline flex items-center gap-1"

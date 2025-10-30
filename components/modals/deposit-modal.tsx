@@ -202,7 +202,7 @@ export function DepositModal({ isOpen, onClose }: DepositModalProps) {
               <div className="text-xs">
                 <p className="text-muted-foreground mb-1">Transaction Hash:</p>
                 <a
-                  href={`https://scan.testnet.mezo.network/tx/${hash}`}
+                  href={`https://explorer.test.mezo.org/tx/${hash}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-primary hover:underline break-all"
