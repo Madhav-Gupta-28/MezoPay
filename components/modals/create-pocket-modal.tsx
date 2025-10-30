@@ -17,7 +17,7 @@ interface CreatePocketModalProps {
 }
 
 // Constants
-const MIN_MUSD_MINT_VALUE = 1800;
+const MIN_MUSD_MINT_VALUE = 1;
 
 // Define preset pocket options
 const POCKET_PRESETS = [
