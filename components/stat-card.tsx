@@ -15,7 +15,12 @@ export function StatCard({ label, value, hint, accent }: StatCardProps) {
       }`}
     >
       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{label}</p>
-      <p className={`text-2xl font-bold mt-2 ${accent ? "text-primary" : "text-foreground"}`}>{value}</p>
+      <p
+        className={`text-2xl font-bold mt-2 ${accent ? "text-primary" : "text-foreground"}`}
+        suppressHydrationWarning
+      >
+        {value}
+      </p>
       {hint && <p className="text-xs text-muted-foreground mt-2">{hint}</p>}
     </div>
   )

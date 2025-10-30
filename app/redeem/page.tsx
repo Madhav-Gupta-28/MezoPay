@@ -33,11 +33,11 @@ export default function RedeemPage() {
 
       {/* Hero Section */}
       <section className="border-b border-border/50">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-12 md:py-16">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-6 py-12 md:py-16">
           <div className="max-w-2xl">
             <h1 className="text-4xl md:text-5xl font-bold text-foreground mb-4">Redeem BTC</h1>
             <p className="text-lg text-muted-foreground">
-              Repay your MUSD debt and unlock your Bitcoin collateral. Redeem at any time with no penalties.
+              Repay your MUSD debt and unlock your Bitcoin collateral.
             </p>
           </div>
         </div>
