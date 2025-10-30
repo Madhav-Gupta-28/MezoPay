@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -9,6 +9,11 @@ import { X, ArrowRight, Loader2, CheckCircle2, AlertCircle } from "lucide-react"
 import { useRedeem } from "@/hooks/useRedeem"
 import { useAccount } from "wagmi"
 import { toast } from "sonner"
+import { createPublicClient, http, parseUnits, formatUnits } from "viem"
+import { BORROWER_OPERATIONS_ABI } from "@/lib/abis"
+import { TROVE_MANAGER_ABI } from "@/lib/troveManagerAbi"
+import { ADDRESSES } from "@/lib/addresses"
+import { mezoTestnet } from "@/lib/config"
 
 interface RedeemModalProps {
   isOpen: boolean
@@ -20,7 +25,9 @@ interface RedeemModalProps {
 export function RedeemModal({ isOpen, onClose, lockedBtc, musdDebt }: RedeemModalProps) {
   const [musdRepay, setMusdRepay] = useState("")
   const { redeem, isPending, isConfirming, isConfirmed, error, hash } = useRedeem()
-  const { isConnected } = useAccount()
+  const { isConnected, address } = useAccount()
+  const [fullCloseAmount, setFullCloseAmount] = useState<number | null>(null)
+  const [isLoadingCloseAmt, setIsLoadingCloseAmt] = useState(false)
  
   // Protocol constants
   const GAS_COMP = 200
@@ -47,6 +54,30 @@ export function RedeemModal({ isOpen, onClose, lockedBtc, musdDebt }: RedeemModa
       invalidPartial: invalid,
     }
   }, [musdDebt, GAS_COMP, MIN_NET_DEBT, musdRepay])
+
+  // Fetch exact mUSD needed to fully close (debt - gasComp), including accrued interest
+  useEffect(() => {
+    if (!isOpen || !isConnected || !address) return
+    const run = async () => {
+      try {
+        setIsLoadingCloseAmt(true)
+        const pc = createPublicClient({ chain: mezoTestnet, transport: http() })
+        const [debt, gasComp] = await Promise.all([
+          pc.readContract({ address: ADDRESSES.TROVE_MANAGER, abi: TROVE_MANAGER_ABI, functionName: "getTroveDebt", args: [address] }) as Promise<bigint>,
+          pc.readContract({ address: ADDRESSES.BORROWER_OPERATIONS, abi: BORROWER_OPERATIONS_ABI, functionName: "MUSD_GAS_COMPENSATION" }) as Promise<bigint>,
+        ])
+        const needed = debt - gasComp
+        const neededWithBuffer = needed + parseUnits("0.01", 18) // tiny buffer for interest drift
+        setFullCloseAmount(Number(formatUnits(neededWithBuffer, 18)))
+      } catch (e) {
+        console.error("Failed to fetch full close amount", e)
+        setFullCloseAmount(null)
+      } finally {
+        setIsLoadingCloseAmt(false)
+      }
+    }
+    run()
+  }, [isOpen, isConnected, address])
 
   if (!isOpen) return null
 
@@ -125,6 +156,17 @@ export function RedeemModal({ isOpen, onClose, lockedBtc, musdDebt }: RedeemModa
                 <p className="text-xs text-muted-foreground mt-2">≈ ${(btcToReceive * 67000).toFixed(2)}</p>
               </div>
             )}
+
+            {/* Full close helper */}
+            <div className="p-3 bg-muted/40 rounded-md border border-border/40">
+              <p className="text-xs text-muted-foreground">
+                {isLoadingCloseAmt
+                  ? "Fetching exact amount to fully close..."
+                  : fullCloseAmount != null
+                  ? `Pay ${fullCloseAmount.toFixed(2)} MUSD to fully close your trove.`
+                  : "Connect wallet to see the exact amount to fully close."}
+              </p>
+            </div>
 
             {/* Summary */}
             {musdRepay && (
