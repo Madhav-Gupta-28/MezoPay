@@ -17,7 +17,8 @@ interface CreatePocketModalProps {
 }
 
 // Constants
-const MIN_MUSD_MINT_VALUE = 1;
+// This minimum is enforced by the Mezo smart contract
+const MIN_MUSD_MINT_VALUE = 1800;
 
 // Define preset pocket options
 const POCKET_PRESETS = [
@@ -38,7 +39,6 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
   const [btcAmount, setBtcAmount] = useState("")
   const [musdAmount, setMusdAmount] = useState("")
   const [step, setStep] = useState(1)
-  const [txHash, setTxHash] = useState("")
   
   // Get account and balance information
   const { address, isConnected } = useAccount()
@@ -52,7 +52,7 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
     ? parseFloat(balanceData.formatted) 
     : 0
     
-  const { mintMusd, isPending, isConfirming, isConfirmed, error } = useMintMusd()
+  const { mintMusd, hash, isPending, isConfirming, isConfirmed, error } = useMintMusd()
   
   const selectPreset = (preset: typeof POCKET_PRESETS[number]) => {
     if (preset.name === "Custom") {
@@ -71,7 +71,7 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
   const getBtcEquivalent = (musdAmount: number) => {
     // At 150% collateralization, 1 BTC = 67000 USD / 1.5 ≈ 44,666 MUSD
     // So for 1800 MUSD, we need 1800 * 1.5 / 67000 BTC ≈ 0.04 BTC
-    return (musdAmount * 1.5) / 90000;
+    return (musdAmount * 1.5) / 67000;
   }
 
   // Calculate max MUSD that can be minted from BTC
@@ -117,7 +117,6 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
     setCustomMode(false);
     setBtcAmount("");
     setMusdAmount("");
-    setTxHash("");
   }
 
   const handleCreate = async () => {
@@ -158,17 +157,13 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
       console.log(`Creating pocket: ${pocketName} with emoji ${pocketEmoji}`);
       
       // Mint the MUSD (this will trigger wallet popup)
-      const result = await mintMusd({
+      await mintMusd({
         btcCollateral: btcAmount,
         musdToMint: derivedMusd
       });
       
-      // Capture tx hash (or any other identifier from the result)
-      // Note: Type casting to any here since we don't know the exact return type of mintMusd
-      const txResult = result as any;
-      if (txResult?.hash) {
-        setTxHash(txResult.hash);
-      }
+      // The hash will be automatically available from the useMintMusd hook
+      // We don't need to manually set it anymore
       
       toast.success(`${pocketName} pocket created`);
       
@@ -467,17 +462,20 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
                           <span className="text-muted-foreground">Amount</span>
                           <span className="font-medium">{musdAmount || getMaxMusd(parseFloat(btcAmount)).toFixed(2)} MUSD</span>
                         </div>
-                        {txHash && (
+                        {hash && (
                           <div className="pt-2 mt-2 border-t border-border/50">
                             <div className="flex items-center justify-between text-xs">
                               <span className="text-muted-foreground">Transaction</span>
                               <a 
-                                href={`https://scan.testnet.mezo.network/tx/${txHash}`} 
+                                href={`https://scan.testnet.mezo.network/tx/${hash}`} 
                                 target="_blank"
                                 rel="noopener noreferrer" 
-                                className="font-medium text-primary hover:underline"
+                                className="font-medium text-primary hover:underline flex items-center gap-1"
                               >
                                 View on Explorer
+                                <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                </svg>
                               </a>
                             </div>
                           </div>
