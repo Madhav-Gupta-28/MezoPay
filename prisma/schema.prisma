@@ -1,0 +1,201 @@
+// Prisma Schema for MezoPay
+// Database: PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  address   String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  pockets      Pocket[]
+  transactions Transaction[]
+  paymentRequests PaymentRequest[]
+  activityLogs    ActivityLog[]
+  settings        UserSettings?
+
+  @@index([address])
+}
+
+model UserSettings {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  emailNotifications    Boolean @default(false)
+  pushNotifications     Boolean @default(true)
+  transactionAlerts     Boolean @default(true)
+  budgetAlerts          Boolean @default(true)
+
+  currency              String  @default("USD")
+  defaultView           String  @default("dashboard")
+  theme                 String  @default("dark")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Pocket {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  name        String
+  emoji       String
+  description String?
+  
+  musdBalance Decimal  @default(0) @db.Decimal(18, 2)
+  btcCollateral Decimal @default(0) @db.Decimal(18, 8)
+  
+  monthlyBudget Decimal? @db.Decimal(18, 2)
+  dailyLimit    Decimal? @db.Decimal(18, 2)
+  
+  isActive    Boolean  @default(true)
+  isArchived  Boolean  @default(false)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  transactions Transaction[]
+  budgetAlerts BudgetAlert[]
+
+  @@index([userId])
+  @@index([userId, isActive])
+}
+
+model Transaction {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  pocketId        String?
+  pocket          Pocket?  @relation(fields: [pocketId], references: [id], onDelete: SetNull)
+  
+  type            TransactionType
+  status          TransactionStatus @default(PENDING)
+  
+  amount          Decimal  @db.Decimal(18, 2)
+  btcAmount       Decimal? @db.Decimal(18, 8)
+  
+  fromAddress     String?
+  toAddress       String?
+  
+  txHash          String?  @unique
+  blockNumber     Int?
+  gasUsed         Decimal? @db.Decimal(18, 8)
+  
+  memo            String?
+  category        String?
+  tags            String[]
+  
+  confirmedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userId])
+  @@index([pocketId])
+  @@index([type])
+  @@index([status])
+  @@index([txHash])
+  @@index([createdAt])
+}
+
+model PaymentRequest {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  amount      Decimal  @db.Decimal(18, 2)
+  memo        String?
+  qrCodeData  String
+  
+  status      PaymentRequestStatus @default(PENDING)
+  paidAt      DateTime?
+  paidBy      String?
+  txHash      String?
+  
+  expiresAt   DateTime?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+model BudgetAlert {
+  id          String   @id @default(cuid())
+  pocketId    String
+  pocket      Pocket   @relation(fields: [pocketId], references: [id], onDelete: Cascade)
+  
+  alertType   BudgetAlertType
+  threshold   Decimal  @db.Decimal(18, 2)
+  message     String
+  
+  isRead      Boolean  @default(false)
+  triggeredAt DateTime @default(now())
+  
+  @@index([pocketId])
+  @@index([isRead])
+}
+
+model ActivityLog {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  action      String
+  resource    String?
+  resourceId  String?
+  
+  metadata    Json?
+  ipAddress   String?
+  userAgent   String?
+  
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+enum TransactionType {
+  MINT
+  BURN
+  TRANSFER
+  RECEIVE
+  POCKET_TRANSFER
+  REPAY
+}
+
+enum TransactionStatus {
+  PENDING
+  CONFIRMING
+  CONFIRMED
+  FAILED
+  CANCELLED
+}
+
+enum PaymentRequestStatus {
+  PENDING
+  PAID
+  EXPIRED
+  CANCELLED
+}
+
+enum BudgetAlertType {
+  DAILY_LIMIT_WARNING
+  DAILY_LIMIT_EXCEEDED
+  MONTHLY_BUDGET_WARNING
+  MONTHLY_BUDGET_EXCEEDED
+  LOW_BALANCE
+}
+
+
