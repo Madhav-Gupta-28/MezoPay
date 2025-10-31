@@ -14,12 +14,36 @@ import { Card } from "@/components/ui/card"
 import { Wallet, QrCode, ArrowUpRight, Shield, Coins, ScanLine, Zap } from "lucide-react"
 import { useWallet } from "@/hooks/use-wallet"
 import { useRouter } from "next/navigation"
+import { useReadContract } from "wagmi"
+import { formatUnits } from "viem"
+import { ADDRESSES } from "@/lib/addresses"
+import { ERC20_ABI_MIN } from "@/lib/erc20"
 
 export default function Home() {
   const [qrAmount, setQrAmount] = useState("100")
   const [qrMemo, setQrMemo] = useState("")
-  const { isConnected, balance } = useWallet()
+  const { isConnected, balance, address } = useWallet()
   const router = useRouter()
+
+  // Fetch MUSD balance
+  const { data: musdBalance } = useReadContract({
+    address: ADDRESSES.MUSD_TOKEN,
+    abi: ERC20_ABI_MIN,
+    functionName: "balanceOf",
+    args: address ? [address] : undefined,
+    query: {
+      enabled: !!address && isConnected,
+      refetchInterval: 5000, // Refetch every 5 seconds
+    },
+  })
+
+  // Format MUSD balance
+  const musdBalanceFormatted = musdBalance 
+    ? parseFloat(formatUnits(musdBalance as bigint, 18)).toLocaleString('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })
+    : null
   return (
     <div className="min-h-screen bg-background">
       <Navigation />
@@ -72,7 +96,7 @@ export default function Home() {
             {/* Right Column - Wallet Snapshot */}
             <div className="rounded-2xl border border-border/50 bg-card p-8 card-premium space-y-8">
               <div className="space-y-4">
-                <StatCard label="MUSD Balance" value={isConnected ? "1,240.00" : "Connect wallet"} accent />
+                <StatCard label="MUSD Balance" value={isConnected ? (musdBalanceFormatted ?? "0.00") : "Connect wallet"} accent />
                 <StatCard 
                   label="BTC Collateral" 
                   value={isConnected ? (balance.formatted ? `${parseFloat(balance.formatted).toFixed(4)} ${balance.symbol}` : "0 BTC") : "Connect wallet"} 
