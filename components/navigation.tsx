@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { WalletButton } from "@/components/wallet-button"
 import { ThemeToggle } from "@/components/theme-toggle"
+import Image from "next/image"
 
 export function Navigation() {
   return (
@@ -11,9 +12,11 @@ export function Navigation() {
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-3 group">
-            <div className="h-8 w-8 rounded-lg bg-linear-to-r from-primary to-primary/70 shadow-sm group-hover:shadow-md transition-shadow" />
-            <span className="text-lg font-bold bg-linear-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
-              MezoPay
+            <Image className="h-12 w-12 rounded-lg bg-linear-to-r from-primary to-primary/70 hover:scale-105 transition-all duration-200"
+            src="/logo.jpg" alt="MezoPay" width={50} height={50} />
+            <span className="text-2xl font-bold">
+              <span className="text-primary">Mezo</span>
+              <span className="text-foreground">Pay</span>
             </span>
           </Link>
 
