@@ -67,7 +67,12 @@ export default function ActivityPage() {
   const formatAmount = (tx: any) => {
     const sign = ['MINT', 'RECEIVE'].includes(tx.type) ? '+' : '-'
     const tokenSymbol = tx.tokenSymbol || 'Token'
-    return `${sign}${tx.formattedValue} ${tokenSymbol}`
+    
+    // Format to 2 decimal places
+    const value = parseFloat(tx.formattedValue || '0')
+    const formatted = isNaN(value) ? '0.00' : value.toFixed(2)
+    
+    return `${sign}${formatted} ${tokenSymbol}`
   }
 
   // Format date from timestamp
