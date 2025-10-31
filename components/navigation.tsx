@@ -20,12 +20,6 @@ export function Navigation() {
           {/* Links */}
           <div className="hidden items-center gap-8 md:flex">
             <Link
-              href="/"
-              className="text-sm font-medium text-foreground/70 hover:text-primary transition-colors duration-200"
-            >
-              Home
-            </Link>
-            <Link
               href="/pockets"
               className="text-sm font-medium text-foreground/70 hover:text-primary transition-colors duration-200"
             >
