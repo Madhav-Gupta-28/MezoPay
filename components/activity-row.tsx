@@ -30,11 +30,12 @@ export function ActivityRow({ icon: Icon, type, counterparty, amount, status, ex
       <div className="flex items-center gap-4">
         <div className="text-right">
           <p className="font-semibold text-foreground">{amount}</p>
-          <div className={`text-xs px-2 py-1 rounded ${statusColors[status]}`}>
+        </div>
+          <div className={`text-xs px-2 py-1 rounded-md ${statusColors[status]}`}>
             {status.charAt(0).toUpperCase() + status.slice(1)}
           </div>
-        </div>
         {explorerLink && (
+
           <a href={explorerLink} className="text-primary hover:underline text-sm">
             View
           </a>
