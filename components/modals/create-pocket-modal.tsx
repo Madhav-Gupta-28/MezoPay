@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -10,15 +10,18 @@ import { useMintMusd } from "@/hooks/useMintMusd"
 import { useAccount, useBalance } from "wagmi"
 import { toast } from "sonner"
 import { mezoTestnet } from "@/lib/config"
+import { createPublicClient, http, formatUnits, parseUnits } from "viem"
+import { ADDRESSES } from "@/lib/addresses"
+import { BORROWER_OPERATIONS_ABI } from "@/lib/abis"
+import { TROVE_MANAGER_ABI } from "@/lib/troveManagerAbi"
 
 interface CreatePocketModalProps {
   isOpen: boolean
   onClose: () => void
 }
 
-// Constants
-// This minimum is enforced by the Mezo smart contract
-const MIN_MUSD_MINT_VALUE = 1800;
+// Fallbacks; real values fetched on-chain when connected
+const MIN_MUSD_MINT_VALUE_FALLBACK = 1800;
 
 // Define preset pocket options
 const POCKET_PRESETS = [
@@ -53,6 +56,19 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
     : 0
     
   const { mintMusd, hash, isPending, isConfirming, isConfirmed, error } = useMintMusd()
+
+  // On-chain params & derived limits
+  const [minNetDebt, setMinNetDebt] = useState<number>(MIN_MUSD_MINT_VALUE_FALLBACK)
+  const [borrowingRate, setBorrowingRate] = useState<number>(0.001)
+  const [price, setPrice] = useState<number>(67000)
+  const [CCR, setCCR] = useState<bigint>(BigInt(0))
+  const [MCR, setMCR] = useState<bigint>(BigInt(0))
+  const [gasComp, setGasComp] = useState<bigint>(BigInt(0))
+  const [oldDebt, setOldDebt] = useState<bigint>(BigInt(0))
+  const [oldColl, setOldColl] = useState<bigint>(BigInt(0))
+  const [storedMaxCap, setStoredMaxCap] = useState<bigint>(BigInt(0))
+  const [isRecoveryMode, setIsRecoveryMode] = useState<boolean>(false)
+  const [loadingLimits, setLoadingLimits] = useState<boolean>(false)
   
   const selectPreset = (preset: typeof POCKET_PRESETS[number]) => {
     if (preset.name === "Custom") {
@@ -65,26 +81,143 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
     }
   }
 
-  if (!isOpen) return null
+  // Do not early-return before hooks; we'll return null later after hooks
 
-  // Calculate the minimum BTC amount needed for the minimum MUSD
+  // Calculate the minimum BTC amount needed for the given MUSD (150% collateral)
   const getBtcEquivalent = (musdAmount: number) => {
-    // At 150% collateralization, 1 BTC = 67000 USD / 1.5 ≈ 44,666 MUSD
-    // So for 1800 MUSD, we need 1800 * 1.5 / 67000 BTC ≈ 0.04 BTC
-    return (musdAmount * 1.5) / 67000;
+    return price > 0 ? (musdAmount * 1.5) / price : 0
   }
 
-  // Calculate max MUSD that can be minted from BTC
-  const getMaxMusd = (btcAmount: number) => {
-    return (btcAmount * 67000) / 1.5;
-  }
+  // Max MUSD that can be minted from BTC at 150%, ignoring capacity (used for display only if no wallet)
+  const getMaxMusdNaive = (btc: number) => (btc * price) / 1.5
+
+  // Fetch on-chain params when open/connected
+  useEffect(() => {
+    if (!isOpen || !isConnected) return
+    const run = async () => {
+      try {
+        setLoadingLimits(true)
+        const pc = createPublicClient({ chain: mezoTestnet, transport: http() })
+        const [minND, br, priceFeedAddr, ccr, mcr, gcomp] = await Promise.all([
+          pc.readContract({ address: ADDRESSES.BORROWER_OPERATIONS, abi: BORROWER_OPERATIONS_ABI, functionName: "minNetDebt" }) as Promise<bigint>,
+          pc.readContract({ address: ADDRESSES.BORROWER_OPERATIONS, abi: BORROWER_OPERATIONS_ABI, functionName: "borrowingRate" }) as Promise<bigint>,
+          pc.readContract({ address: ADDRESSES.BORROWER_OPERATIONS, abi: BORROWER_OPERATIONS_ABI, functionName: "priceFeed" }) as Promise<`0x${string}`>,
+          pc.readContract({ address: ADDRESSES.BORROWER_OPERATIONS, abi: BORROWER_OPERATIONS_ABI, functionName: "CCR" }) as Promise<bigint>,
+          pc.readContract({ address: ADDRESSES.BORROWER_OPERATIONS, abi: BORROWER_OPERATIONS_ABI, functionName: "MCR" }) as Promise<bigint>,
+          pc.readContract({ address: ADDRESSES.BORROWER_OPERATIONS, abi: BORROWER_OPERATIONS_ABI, functionName: "MUSD_GAS_COMPENSATION" }) as Promise<bigint>,
+        ])
+        const px = (await pc.readContract({ address: priceFeedAddr, abi: [
+          { type: "function", stateMutability: "nonpayable", name: "fetchPrice", inputs: [], outputs: [{name: "", type: "uint256"}] },
+        ] as const, functionName: "fetchPrice" })) as bigint
+
+        const [debt, coll, maxCap] = await Promise.all([
+          address ? (pc.readContract({ address: ADDRESSES.TROVE_MANAGER, abi: TROVE_MANAGER_ABI, functionName: "getTroveDebt", args: [address] }) as Promise<bigint>) : Promise.resolve(BigInt(0)),
+          address ? (pc.readContract({ address: ADDRESSES.TROVE_MANAGER, abi: TROVE_MANAGER_ABI, functionName: "getTroveColl", args: [address] }) as Promise<bigint>) : Promise.resolve(BigInt(0)),
+          address ? (pc.readContract({ address: ADDRESSES.TROVE_MANAGER, abi: TROVE_MANAGER_ABI, functionName: "getTroveMaxBorrowingCapacity", args: [address] }) as Promise<bigint>) : Promise.resolve(BigInt(0)),
+        ])
+
+        const recovery = (await pc.readContract({ address: ADDRESSES.TROVE_MANAGER, abi: TROVE_MANAGER_ABI, functionName: "checkRecoveryMode", args: [px] })) as boolean
+
+        setMinNetDebt(Number(formatUnits(minND, 18)))
+        setBorrowingRate(Number(formatUnits(br, 18)))
+        setPrice(Number(formatUnits(px, 18)))
+        setCCR(ccr)
+        setMCR(mcr)
+        setGasComp(gcomp)
+        setStoredMaxCap(maxCap)
+        setOldDebt(debt)
+        setOldColl(coll)
+        setIsRecoveryMode(recovery)
+      } catch (e) {
+        console.error("Failed to load on-chain limits", e)
+      } finally {
+        setLoadingLimits(false)
+      }
+    }
+    run()
+  }, [isOpen, isConnected, address])
+
+  // Derived precise max mint based on added BTC
+  const maxAvailableMint = useMemo(() => {
+    try {
+      const addedColl = btcAmount ? parseUnits(btcAmount, 18) : BigInt(0)
+      const collPlus = oldColl + addedColl
+      if (collPlus === BigInt(0)) return 0
+      const priceBI = parseUnits(String(price), 18)
+
+      // For existing troves: use stored maxBorrowingCapacity (doesn't auto-update when adding collateral)
+      // For new troves: calculate based on new collateral
+      let maxCapToUse: bigint
+      if (oldDebt > BigInt(0)) {
+        // Existing trove: use stored capacity (matches hook check)
+        maxCapToUse = storedMaxCap
+      } else {
+        // New trove: calculate from collateral
+        const numerator = collPlus * priceBI
+        const denom = BigInt(110) * BigInt(1e16)
+        maxCapToUse = numerator / denom
+      }
+
+      const capSub = oldDebt > BigInt(0) ? oldDebt : gasComp
+      const remainingCap = maxCapToUse > capSub ? maxCapToUse - capSub : BigInt(0)
+      if (remainingCap <= BigInt(0)) return 0
+      const divider = isRecoveryMode ? 1 : (1 + borrowingRate)
+      const mintMaxCapacity = Number(formatUnits(remainingCap, 18)) / divider
+
+      // ICR bound
+      const threshold = isRecoveryMode ? CCR : MCR
+      if (threshold === BigInt(0)) return Math.max(0, mintMaxCapacity)
+      const oldICR = oldDebt > BigInt(0) ? ((oldColl * priceBI) / oldDebt) : BigInt(0)
+      const requiredThreshold = isRecoveryMode && oldICR > threshold ? oldICR : threshold
+      const maxDebtByICR = (collPlus * priceBI) / requiredThreshold
+      let addDebtAllowed = maxDebtByICR > oldDebt ? maxDebtByICR - oldDebt : BigInt(0)
+      if (oldDebt === BigInt(0)) {
+        addDebtAllowed = maxDebtByICR > gasComp ? maxDebtByICR - gasComp : BigInt(0)
+      }
+      const mintMaxICR = Number(formatUnits(addDebtAllowed, 18)) / divider
+      
+      // minNetDebt constraint ONLY applies to new troves (openTrove), NOT to existing troves (adjustTrove)
+      // The contract's adjustTrove does NOT enforce minNetDebt when increasing debt
+      if (oldDebt > BigInt(0)) {
+        // Existing trove: no minNetDebt constraint, just return capacity/ICR limit
+        return Math.max(0, Math.min(mintMaxCapacity, mintMaxICR))
+      } else {
+        // New trove: enforce minNetDebt requirement
+        // Hook checks: netDebt = debtAmount + fee >= minNetDebt
+        // So: debtAmount >= minNetDebt - fee = minNetDebt - (debtAmount * borrowingRate)
+        // Solving: debtAmount >= minNetDebt / (1 + borrowingRate) in normal mode
+        // For recovery mode: debtAmount >= minNetDebt (no fee)
+        const minMintRequired = isRecoveryMode 
+          ? minNetDebt 
+          : minNetDebt / (1 + borrowingRate)
+        
+        const maxByCapacityAndICR = Math.min(mintMaxCapacity, mintMaxICR)
+        // If capacity allows less than minNetDebt requirement, it's impossible to mint
+        if (maxByCapacityAndICR < minMintRequired) {
+          return 0 // Can't mint - capacity too low for minNetDebt
+        }
+        // Return the higher of: capacity/ICR limit OR minNetDebt requirement
+        return Math.max(minMintRequired, maxByCapacityAndICR)
+      }
+    } catch {
+      return 0
+    }
+  }, [btcAmount, oldColl, oldDebt, storedMaxCap, price, borrowingRate, isRecoveryMode, CCR, MCR, gasComp, minNetDebt])
+
+  // Fetch on-chain params when open/connected
+  
+  // Move to step 4 when transaction is pending (user approved in wallet)
+  useEffect(() => {
+    if (isPending && step === 3) {
+      setStep(4);
+    }
+  }, [isPending, step]);
 
   const isStep1Valid = () => pocketName.trim() !== ""
   
   const isStep2Valid = () => {
-    // Require enough BTC to mint at least the minimum MUSD
-    const minBtcRequired = getBtcEquivalent(MIN_MUSD_MINT_VALUE);
-    return btcAmount && parseFloat(btcAmount) >= minBtcRequired;
+    // Just check if BTC amount is entered and valid
+    return btcAmount && parseFloat(btcAmount) > 0;
   }
   
   const isStep3Valid = () => {
@@ -96,7 +229,11 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
     }
     
     const musdValue = parseFloat(musdAmount);
-    return !isNaN(musdValue) && musdValue >= MIN_MUSD_MINT_VALUE;
+    if (isNaN(musdValue)) return false;
+    // For new trove: must be >= minNetDebt
+    if (oldDebt === BigInt(0)) return musdValue >= minNetDebt;
+    // Existing trove: must be <= maxAvailableMint
+    return musdValue > 0 && musdValue <= maxAvailableMint;
   }
   
   // Step 4 is the transaction confirmation/success step
@@ -143,24 +280,34 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
     
     let derivedMusd = musdAmount
       
-    // Ensure minimum MUSD amount
-    if (parseFloat(derivedMusd) < MIN_MUSD_MINT_VALUE) {
-      toast.error(`Minimum MUSD mint value is ${MIN_MUSD_MINT_VALUE}`)
-      return
+    const musdVal = parseFloat(derivedMusd)
+    if (oldDebt === BigInt(0)) {
+      if (musdVal < minNetDebt) {
+        toast.error(`Minimum MUSD mint value is ${minNetDebt}`)
+        return
+      }
+    } else {
+      if (musdVal > maxAvailableMint) {
+        toast.error(`Exceeds your current max capacity. Max: ${maxAvailableMint.toFixed(2)} MUSD`)
+        return
+      }
     }
 
+    // Store pocket data (we might need a separate API call for this in a real implementation)
+    const pocketEmoji = customMode ? "💰" : selectedEmoji;
+    console.log(`Creating pocket: ${pocketName} with emoji ${pocketEmoji}`);
+    
     try {
-      setStep(4); // Move to transaction confirmation step
-      
-      // Store pocket data (we might need a separate API call for this in a real implementation)
-      const pocketEmoji = customMode ? "💰" : selectedEmoji;
-      console.log(`Creating pocket: ${pocketName} with emoji ${pocketEmoji}`);
-      
       // Mint the MUSD (this will trigger wallet popup)
+      // Only move to step 4 after transaction is initiated (when isPending becomes true)
       await mintMusd({
         btcCollateral: btcAmount,
         musdToMint: derivedMusd
       });
+      
+      // If we get here, transaction was initiated successfully
+      // Move to step 4 to show confirmation screen
+      setStep(4);
       
       // The hash will be automatically available from the useMintMusd hook
       // We don't need to manually set it anymore
@@ -169,11 +316,31 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
       
       // Don't close modal or reset state here - we'll stay on step 4
     } catch (e: any) {
-      toast.error("Mint failed", { description: e?.message?.slice(0, 140) });
-      // Go back to step 3 on error
-      setStep(3);
+      // Check if it's a user rejection (user denied transaction)
+      const errorMessage = e?.message || String(e);
+      const isUserRejection = 
+        errorMessage.toLowerCase().includes('user rejected') ||
+        errorMessage.toLowerCase().includes('user denied') ||
+        errorMessage.toLowerCase().includes('user cancelled') ||
+        errorMessage.toLowerCase().includes('rejected') ||
+        errorMessage.toLowerCase().includes('denied') ||
+        e?.code === 4001 || // MetaMask user rejection code
+        e?.code === 'ACTION_REJECTED';
+      
+      if (isUserRejection) {
+        // User rejected - silently stay on step 3, no error toast
+        // Don't change step, we're already on step 3
+        return;
+      }
+      
+      // Validation error or other error before transaction - show toast, stay on step 3
+      toast.error("Mint failed", { description: errorMessage.slice(0, 140) });
+      // Stay on step 3, don't move to step 4
     }
   }
+
+  // Now safe to conditional render after all hooks are declared
+  if (!isOpen) return null
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -275,9 +442,11 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
                     Available: {isBalanceLoading ? '...' : availableBtcBalance.toFixed(4)} BTC
                   </div>
                 </div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  <span className="font-medium">Min required:</span> {getBtcEquivalent(MIN_MUSD_MINT_VALUE).toFixed(4)} BTC (for {MIN_MUSD_MINT_VALUE} MUSD)
-                </div>
+                {oldDebt === BigInt(0) && (
+                  <div className="text-xs text-muted-foreground mt-1">
+                    <span className="font-medium">Note:</span> If you are minting for the first time, you need at least {getBtcEquivalent(minNetDebt).toFixed(4)} BTC (equivalent to {minNetDebt.toFixed(2)} MUSD)
+                  </div>
+                )}
                 <div className="relative mt-2">
                   <Input
                     id="btc-amount"
@@ -294,10 +463,7 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
                       variant="ghost"
                       size="sm"
                       onClick={() => {
-                        // Ensure the amount is enough for minimum MUSD
-                        const minBtc = getBtcEquivalent(MIN_MUSD_MINT_VALUE);
-                        const amount = Math.max(availableBtcBalance * 0.25, minBtc);
-                        setBtcAmount(amount.toFixed(4));
+                        setBtcAmount((availableBtcBalance * 0.25).toFixed(4));
                       }}
                       className="h-7 px-2 text-xs hover:bg-primary/10 hover:text-primary"
                     >
@@ -308,10 +474,7 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
                       variant="ghost"
                       size="sm"
                       onClick={() => {
-                        const available = availableBtcBalance;
-                        const minBtc = getBtcEquivalent(MIN_MUSD_MINT_VALUE);
-                        const amount = Math.max(available * 0.5, minBtc);
-                        setBtcAmount(amount.toFixed(4));
+                        setBtcAmount((availableBtcBalance * 0.5).toFixed(4));
                       }}
                       className="h-7 px-2 text-xs hover:bg-primary/10 hover:text-primary"
                     >
@@ -332,7 +495,7 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
               <div className="p-4 bg-primary/5 rounded-lg border border-primary/20">
                 <p className="text-sm text-muted-foreground">
                   <span className="font-semibold text-foreground">Collateral Value:</span> $
-                  {btcAmount ? (Number.parseFloat(btcAmount) * 67000).toFixed(2) : "0.00"}
+                  {btcAmount ? (Number.parseFloat(btcAmount) * price).toFixed(2) : "0.00"}
                 </p>
               </div>
             </div>
@@ -346,15 +509,21 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
                     <Label htmlFor="musd-amount" className="font-semibold text-foreground">
                       Mint MUSD
                     </Label>
-                    <div className="text-xs text-muted-foreground">
-                      Max available: {btcAmount ? getMaxMusd(Number.parseFloat(btcAmount)).toFixed(2) : "0.00"} MUSD
+                      <div className="text-xs text-muted-foreground">
+                      {loadingLimits
+                        ? "Calculating limits..."
+                        : oldDebt > BigInt(0)
+                        ? maxAvailableMint === 0
+                          ? <span className="text-red-500">Max available: 0 MUSD (increase BTC to meet minimum)</span>
+                          : `Max available: ${maxAvailableMint.toFixed(2)} MUSD`
+                        : `Max (at 150%): ${btcAmount ? getMaxMusdNaive(Number.parseFloat(btcAmount)).toFixed(2) : "0.00"} MUSD`}
                     </div>
                   </div>
                   <div className="text-xs text-muted-foreground mt-1 flex justify-between">
-                    <span><span className="font-medium">Minimum mint:</span> {MIN_MUSD_MINT_VALUE} MUSD</span>
+                    <span><span className="font-medium">Minimum mint:</span> {minNetDebt.toFixed(2)} MUSD</span>
                     <span className="text-primary cursor-pointer" onClick={() => {
-                      const maxMusd = btcAmount ? getMaxMusd(Number.parseFloat(btcAmount)) : 0;
-                      const defaultAmount = Math.max(maxMusd * 0.75, MIN_MUSD_MINT_VALUE);
+                      const maxMusd = oldDebt > BigInt(0) ? maxAvailableMint : (btcAmount ? getMaxMusdNaive(Number.parseFloat(btcAmount)) : 0)
+                      const defaultAmount = Math.max(maxMusd * 0.75, minNetDebt);
                       setMusdAmount(defaultAmount.toFixed(2));
                     }}>
                       Suggest amount
@@ -376,8 +545,8 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
                         variant="ghost"
                         size="sm"
                           onClick={() => {
-                          const maxAmount = getMaxMusd(Number.parseFloat(btcAmount));
-                          const amount = Math.max(maxAmount * 0.25, MIN_MUSD_MINT_VALUE);
+                          const maxAmount = oldDebt > BigInt(0) ? maxAvailableMint : getMaxMusdNaive(Number.parseFloat(btcAmount));
+                          const amount = Math.max(maxAmount * 0.25, minNetDebt);
                           setMusdAmount(amount.toFixed(2));
                         }}
                         className="h-7 px-2 text-xs hover:bg-primary/10 hover:text-primary"
@@ -389,8 +558,8 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
                         variant="ghost"
                         size="sm"
                         onClick={() => {
-                          const maxAmount = getMaxMusd(Number.parseFloat(btcAmount));
-                          const amount = Math.max(maxAmount * 0.5, MIN_MUSD_MINT_VALUE);
+                          const maxAmount = oldDebt > BigInt(0) ? maxAvailableMint : getMaxMusdNaive(Number.parseFloat(btcAmount));
+                          const amount = Math.max(maxAmount * 0.5, minNetDebt);
                           setMusdAmount(amount.toFixed(2));
                         }}
                         className="h-7 px-2 text-xs hover:bg-primary/10 hover:text-primary"
@@ -402,7 +571,7 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
                         variant="ghost"
                         size="sm"
                         onClick={() => {
-                          const maxAmount = getMaxMusd(Number.parseFloat(btcAmount));
+                          const maxAmount = oldDebt > BigInt(0) ? maxAvailableMint : getMaxMusdNaive(Number.parseFloat(btcAmount));
                           setMusdAmount(maxAmount.toFixed(2));
                         }}
                         className="h-7 px-2 text-xs hover:bg-primary/10 hover:text-primary font-semibold"
@@ -460,7 +629,7 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
                         </div>
                         <div className="flex justify-between text-sm">
                           <span className="text-muted-foreground">Amount</span>
-                          <span className="font-medium">{musdAmount || getMaxMusd(parseFloat(btcAmount)).toFixed(2)} MUSD</span>
+                          <span className="font-medium">{musdAmount || getMaxMusdNaive(parseFloat(btcAmount)).toFixed(2)} MUSD</span>
                         </div>
                         {hash && (
                           <div className="pt-2 mt-2 border-t border-border/50">
@@ -483,23 +652,36 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
                       </div>
                     </div>
                   </>
-                ) : (
-                  // Error state
+                ) : error ? (
+                  // Error state - only show if there's an actual error from the hook
                   <>
                     <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mb-4">
                       <X className="h-8 w-8 text-red-500" />
                     </div>
                     <h3 className="text-xl font-bold text-foreground mb-2">Transaction Failed</h3>
-                    <p className="text-sm text-red-500 text-center">
-                      There was an error creating your pocket.
+                    <p className="text-sm text-red-500 text-center mb-2">
+                      {error.message || "There was an error creating your pocket."}
                     </p>
                     <Button 
-                      onClick={() => setStep(3)} 
+                      onClick={() => {
+                        setStep(3);
+                      }} 
                       variant="outline"
                       className="mt-4"
                     >
                       Try Again
                     </Button>
+                  </>
+                ) : (
+                  // Default state - waiting for transaction to start
+                  <>
+                    <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+                      <Loader2 className="h-8 w-8 text-primary animate-spin" />
+                    </div>
+                    <h3 className="text-xl font-bold text-foreground mb-2">Preparing Transaction</h3>
+                    <p className="text-sm text-muted-foreground text-center">
+                      Please wait...
+                    </p>
                   </>
                 )}
               </div>

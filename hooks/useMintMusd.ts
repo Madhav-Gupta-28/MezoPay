@@ -62,14 +62,19 @@ export function useMintMusd() {
       const DECIMALS = parseUnits("1", 18);
       const fee = (debtAmount * borrowingRate) / DECIMALS;
       const netDebt = debtAmount + (isRecoveryMode ? BigInt(0) : fee);
-      if (netDebt < minNetDebt) {
-        const need = Number((minNetDebt * DECIMALS) / (DECIMALS + (isRecoveryMode ? BigInt(0) : borrowingRate)) - debtAmount) / 1e18;
-        throw new Error(`Minimum net debt is ${Number(minNetDebt) / 1e18} mUSD. Increase mint by at least ${need.toFixed(2)} mUSD.`);
-      }
 
       const ACTIVE = BigInt(1);
 
       const isActive = troveStatus === ACTIVE || onChainDebt > BigInt(0);
+      
+      // minNetDebt check ONLY applies to new troves (openTrove), NOT to existing troves (adjustTrove)
+      // The contract's adjustTrove does NOT enforce minNetDebt when increasing debt
+      if (!isActive) {
+        if (netDebt < minNetDebt) {
+          const need = Number((minNetDebt * DECIMALS) / (DECIMALS + (isRecoveryMode ? BigInt(0) : borrowingRate)) - debtAmount) / 1e18;
+          throw new Error(`Minimum net debt is ${Number(minNetDebt) / 1e18} mUSD. Increase mint by at least ${need.toFixed(2)} mUSD.`);
+        }
+      }
       if (isActive) {
         // Existing trove: use adjustTrove to add debt (and optionally top-up collateral via msg.value)
         const [oldDebt, oldColl, maxCap] = await Promise.all([
