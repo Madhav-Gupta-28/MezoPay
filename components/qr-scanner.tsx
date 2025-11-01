@@ -67,11 +67,11 @@ export function QrScannerComponent({ onScan, onError, onClose }: QrScannerCompon
   }
 
   return (
-    <Card className="w-full border-border/50">
+    <Card className="w-full border-border/50" suppressHydrationWarning>
       <div className="p-4 space-y-4">
         {/* Permission status */}
         {permissionGranted === false && (
-          <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg text-center">
+          <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg text-center" suppressHydrationWarning>
             <p className="text-sm text-red-500">
               Camera access denied. Please enable camera permissions in your browser settings.
             </p>
@@ -80,7 +80,7 @@ export function QrScannerComponent({ onScan, onError, onClose }: QrScannerCompon
         
         {/* Camera selection (if multiple cameras available) */}
         {cameras.length > 1 && (
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap" suppressHydrationWarning>
             {cameras.map(camera => (
               <Button
                 key={camera.deviceId}
@@ -96,9 +96,9 @@ export function QrScannerComponent({ onScan, onError, onClose }: QrScannerCompon
         )}
         
         {/* Scanner area */}
-        <div className="relative">
+        <div className="relative" suppressHydrationWarning>
           {isCameraActive ? (
-            <div className="aspect-square relative overflow-hidden rounded-lg">
+            <div className="w-full max-h-64 relative overflow-hidden rounded-lg">
               <QrScanner
                 delay={100}
                 onError={handleError}
@@ -114,6 +114,7 @@ export function QrScannerComponent({ onScan, onError, onClose }: QrScannerCompon
                 style={{
                   width: '100%',
                   height: '100%',
+                  maxHeight: '256px',
                   objectFit: 'cover'
                 }}
                 className="w-full h-full object-cover"
@@ -121,7 +122,7 @@ export function QrScannerComponent({ onScan, onError, onClose }: QrScannerCompon
               <div className="absolute inset-0 border-2 border-dashed border-primary/30 pointer-events-none" />
             </div>
           ) : (
-            <div className="aspect-square bg-muted rounded-lg flex items-center justify-center border-2 border-dashed border-border/50">
+            <div className="w-full h-64 bg-muted rounded-lg flex items-center justify-center border-2 border-dashed border-border/50">
               <div className="text-center p-4">
                 <p className="text-muted-foreground font-medium mb-2">Camera is off</p>
                 <p className="text-xs text-muted-foreground mb-4">Turn on camera to scan QR codes</p>
@@ -152,7 +153,7 @@ export function QrScannerComponent({ onScan, onError, onClose }: QrScannerCompon
           )}
         </div>
         
-        <div className="text-center">
+        <div className="text-center" suppressHydrationWarning>
           <p className="text-xs text-muted-foreground">
             Position QR code within the frame to scan
           </p>

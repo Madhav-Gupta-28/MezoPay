@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ScanLine, QrCode, Send, CreditCard, AlertCircle, Check } from "lucide-react"
+import { ScanLine, QrCode, CreditCard, AlertCircle, Check } from "lucide-react"
 import { QrScannerComponent } from "@/components/qr-scanner"
 import { ManualPay } from "@/components/manual-pay"
 import { useTransferMusd } from "@/hooks/useTransferMusd"
@@ -118,7 +118,7 @@ export default function PayPage() {
           <div className="space-y-8">
             <div>
               <h2 className="text-2xl font-bold text-foreground mb-6">Generate Payment</h2>
-              <Card className="p-8 border-border/50 card-premium space-y-6">
+              <Card className="p-8 border-border/50 card-premium space-y-6" suppressHydrationWarning>
                 <div>
                   <Label htmlFor="amount" className="font-semibold text-foreground text-base">
                     Amount (MUSD)
@@ -147,7 +147,7 @@ export default function PayPage() {
                   />
                 </div>
 
-                <div className="p-4 bg-linear-to-br from-primary/10 to-primary/5 rounded-lg border border-primary/20">
+                <div className="p-4 bg-linear-to-br from-primary/10 to-primary/5 rounded-lg border border-primary/20" suppressHydrationWarning>
                   <p className="text-sm text-muted-foreground">
                     <span className="font-semibold text-foreground">Total Amount:</span> {amount} MUSD
                   </p>
@@ -167,27 +167,6 @@ export default function PayPage() {
                 )}
               </Card>
             </div>
-
-            {/* Quick Actions */}
-            <div>
-              <h3 className="text-lg font-semibold text-foreground mb-4">Quick Actions</h3>
-              <div className="grid gap-3">
-                <Button
-                  variant="outline"
-                  className="w-full border-border/50 hover:border-primary/30 hover:bg-primary/5 py-6 font-medium bg-transparent"
-                >
-                  <Send className="h-4 w-4 mr-2" />
-                  Request Payment
-                </Button>
-                <Button
-                  variant="outline"
-                  className="w-full border-border/50 hover:border-primary/30 hover:bg-primary/5 py-6 font-medium bg-transparent"
-                >
-                  <ScanLine className="h-4 w-4 mr-2" />
-                  View Payment History
-                </Button>
-              </div>
-            </div>
           </div>
 
           {/* Pay Section with Tabs */}
@@ -196,7 +175,7 @@ export default function PayPage() {
               <h2 className="text-2xl font-bold text-foreground mb-6">Pay</h2>
               
               {paymentStatus !== 'idle' ? (
-                <Card className="p-8 border-border/50 card-premium space-y-6">
+                <Card className="p-8 border-border/50 card-premium space-y-6" suppressHydrationWarning>
                   <div className="flex flex-col items-center text-center gap-4">
                     {paymentStatus === 'success' ? (
                       <>
@@ -213,7 +192,7 @@ export default function PayPage() {
                         <h3 className="text-xl font-bold">Payment Failed</h3>
                       </>
                     )}
-                    <p className="text-muted-foreground">{statusMessage}</p>
+                    <p className="text-muted-foreground" suppressHydrationWarning>{statusMessage}</p>
                     <Button onClick={resetStatus} className="mt-4">
                       Back to Payment Options
                     </Button>
@@ -233,18 +212,16 @@ export default function PayPage() {
                   </TabsList>
                   
                   <TabsContent value="scan" className="mt-0">
-                    <Card className="border-border/50 card-premium">
-                      <div className="p-6">
-                        <QrScannerComponent 
-                          onScan={handleScan}
-                          onError={(err) => console.error("Scanner error:", err)}
-                        />
-                        
-                        <div className="mt-4 p-4 bg-linear-to-br from-primary/10 to-primary/5 rounded-lg border border-primary/20">
-                          <p className="text-sm text-muted-foreground">
-                            <span className="font-semibold text-foreground">Tip:</span> Scan any MUSD payment QR code to pay instantly
-                          </p>
-                        </div>
+                    <Card className="border-border/50 card-premium p-8 space-y-6" suppressHydrationWarning>
+                      <QrScannerComponent 
+                        onScan={handleScan}
+                        onError={(err) => console.error("Scanner error:", err)}
+                      />
+                      
+                      <div className="p-4 bg-linear-to-br from-primary/10 to-primary/5 rounded-lg border border-primary/20" suppressHydrationWarning>
+                        <p className="text-sm text-muted-foreground">
+                          <span className="font-semibold text-foreground">Tip:</span> Scan any MUSD payment QR code to pay instantly
+                        </p>
                       </div>
                     </Card>
                   </TabsContent>
