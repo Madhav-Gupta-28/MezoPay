@@ -12,12 +12,117 @@ import { useDebtInfo } from "@/hooks/useDebtInfo"
 import { useApproveMusd } from "@/hooks/useApproveMusd"
 import { useCloseTrove } from "@/hooks/useCloseTrove"
 import { toast } from "sonner"
+import { useAccount, useReadContract } from "wagmi"
+import { createPublicClient, http, formatUnits, parseUnits } from "viem"
+import { ADDRESSES } from "@/lib/addresses"
+import { BORROWER_OPERATIONS_ABI } from "@/lib/abis"
+import { TROVE_MANAGER_ABI } from "@/lib/troveManagerAbi"
+import { mezoTestnet } from "@/lib/config"
+
+// Minimal PriceFeed ABI
+const PRICE_FEED_ABI = [
+  {
+    type: "function",
+    stateMutability: "nonpayable",
+    name: "fetchPrice",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+] as const
 
 export default function RedeemPage() {
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [btcPrice, setBtcPrice] = useState<number>(67000) // Fallback value
+  const [interestRate, setInterestRate] = useState<number>(5) // Fallback value (APY)
+  const [isLoadingMetrics, setIsLoadingMetrics] = useState(false)
   
   // Fetch real debt info from blockchain
   const { debtInfo, hasTrove, isLoading, isError, refetch, isConnected } = useDebtInfo()
+  const { address } = useAccount()
+  
+  // Get priceFeed address from BorrowerOperations
+  const { data: priceFeedAddress } = useReadContract({
+    address: ADDRESSES.BORROWER_OPERATIONS,
+    abi: BORROWER_OPERATIONS_ABI,
+    functionName: "priceFeed",
+  })
+  
+  // Get interest rate for user's trove if they have one
+  const { data: troveInterestRate } = useReadContract({
+    address: ADDRESSES.TROVE_MANAGER,
+    abi: TROVE_MANAGER_ABI,
+    functionName: "getTroveInterestRate",
+    args: address ? [address] : undefined,
+    query: {
+      enabled: !!address && isConnected && hasTrove,
+      refetchInterval: 30000, // Refetch every 30 seconds
+    },
+  })
+  
+  // Fetch BTC price and interest rate from contracts
+  useEffect(() => {
+    if (!isConnected) return
+    
+    const fetchMetrics = async () => {
+      try {
+        setIsLoadingMetrics(true)
+        const pc = createPublicClient({ chain: mezoTestnet, transport: http() })
+        
+        // Fetch BTC price from priceFeed
+        if (priceFeedAddress) {
+          try {
+            const price = await pc.readContract({
+              address: priceFeedAddress as `0x${string}`,
+              abi: PRICE_FEED_ABI,
+              functionName: "fetchPrice",
+            }) as bigint
+            setBtcPrice(Number(formatUnits(price, 18)))
+          } catch (error) {
+            console.error("Error fetching BTC price:", error)
+            // Keep fallback value
+          }
+        }
+        
+        // Fetch borrowing rate (this is the borrowing fee, not interest rate)
+        // For interest rate, we use the trove-specific rate if available
+        try {
+          const borrowingRate = await pc.readContract({
+            address: ADDRESSES.BORROWER_OPERATIONS,
+            abi: BORROWER_OPERATIONS_ABI,
+            functionName: "borrowingRate",
+          }) as bigint
+          
+          // Convert interest rate from basis points to percentage (if stored as uint16)
+          // Or use troveInterestRate if available
+          if (troveInterestRate !== undefined && troveInterestRate !== null) {
+            // Interest rate is typically stored as a uint16 representing basis points
+            // For example, 500 = 5% APY
+            const rateValue = Number(troveInterestRate)
+            setInterestRate(rateValue / 100) // Convert from basis points to percentage
+          } else {
+            // Fallback: use borrowing rate as approximation (though it's not the same)
+            // Or calculate from interest accrued
+            const brValue = Number(formatUnits(borrowingRate, 18)) * 100
+            // Borrowing rate is typically very small (0.1%), so we use a default
+            setInterestRate(5) // Default APY if we can't determine
+          }
+        } catch (error) {
+          console.error("Error fetching interest rate:", error)
+          // Keep fallback value
+        }
+      } catch (error) {
+        console.error("Error fetching metrics:", error)
+        // Keep fallback values on error
+      } finally {
+        setIsLoadingMetrics(false)
+      }
+    }
+    
+    fetchMetrics()
+    // Refetch metrics every 30 seconds
+    const interval = setInterval(fetchMetrics, 30000)
+    return () => clearInterval(interval)
+  }, [isConnected, priceFeedAddress, troveInterestRate])
   const { 
     approve, 
     isPending: isApproving, 
@@ -41,10 +146,8 @@ export default function RedeemPage() {
   const principal = debtInfo?.principalFormatted || 0
   const interest = debtInfo?.interestFormatted || 0
   const musdDebt = debtInfo?.totalDebtFormatted || 0
-  const btcPrice = 67000 // TODO: Fetch real price
   const collateralValue = lockedBtc * btcPrice
   const collateralizationRatio = musdDebt > 0 ? (collateralValue / musdDebt) * 100 : 0
-  const interestRate = 5 // TODO: Fetch from contract
   const monthlyInterest = (musdDebt * (interestRate / 100)) / 12
   
   // Check if approval is sufficient
@@ -245,11 +348,19 @@ export default function RedeemPage() {
               <Card className="p-6 border-border/50 card-premium">
                 <h3 className="font-semibold text-foreground mb-4">Key Metrics</h3>
                 <div className="space-y-4">
-                  <StatCard label="BTC Price" value="$67,000" hint="Current market" />
-                  <StatCard label="Interest Rate" value="5% APY" hint="Fixed rate" />
+                  <StatCard 
+                    label="BTC Price" 
+                    value={isLoadingMetrics ? "Loading..." : `$${btcPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}`} 
+                    hint="Current market" 
+                  />
+                  <StatCard 
+                    label="Interest Rate" 
+                    value={isLoadingMetrics ? "Loading..." : `${interestRate.toFixed(2)}% APY`} 
+                    hint="Fixed rate" 
+                  />
                   <StatCard
                     label="Monthly Interest"
-                    value={`${monthlyInterest.toFixed(2)} MUSD`}
+                    value={isLoadingMetrics ? "Loading..." : `${monthlyInterest.toFixed(2)} MUSD`}
                     hint="On current debt"
                   />
                 </div>

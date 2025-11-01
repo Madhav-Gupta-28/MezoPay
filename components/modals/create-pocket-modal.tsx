@@ -42,6 +42,7 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
   const [btcAmount, setBtcAmount] = useState("")
   const [musdAmount, setMusdAmount] = useState("")
   const [step, setStep] = useState(1)
+  const [mounted, setMounted] = useState(false)
   
   // Get account and balance information
   const { address, isConnected } = useAccount()
@@ -203,9 +204,15 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
       return 0
     }
   }, [btcAmount, oldColl, oldDebt, storedMaxCap, price, borrowingRate, isRecoveryMode, CCR, MCR, gasComp, minNetDebt])
-
-  // Fetch on-chain params when open/connected
   
+  // Set mounted to true after component mounts (client-side only)
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Convert oldDebt to number for safe comparisons (avoid BigInt hydration issues)
+  const hasExistingDebt = mounted && oldDebt > BigInt(0);
+
   // Move to step 4 when transaction is pending (user approved in wallet)
   useEffect(() => {
     if (isPending && step === 3) {
@@ -340,7 +347,7 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
   }
 
   // Now safe to conditional render after all hooks are declared
-  if (!isOpen) return null
+  if (!isOpen || !mounted) return null
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -438,11 +445,11 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
                   <Label htmlFor="btc-amount" className="font-semibold text-foreground">
                     Deposit BTC
                   </Label>
-                  <div className="text-xs text-muted-foreground">
-                    Available: {isBalanceLoading ? '...' : availableBtcBalance.toFixed(4)} BTC
+                  <div className="text-xs text-muted-foreground" suppressHydrationWarning>
+                    Available: {!mounted ? '...' : isBalanceLoading ? '...' : availableBtcBalance.toFixed(4)} BTC
                   </div>
                 </div>
-                {oldDebt === BigInt(0) && (
+                {mounted && !hasExistingDebt && (
                   <div className="text-xs text-muted-foreground mt-1">
                     <span className="font-medium">Note:</span> If you are minting for the first time, you need at least {getBtcEquivalent(minNetDebt).toFixed(4)} BTC (equivalent to {minNetDebt.toFixed(2)} MUSD)
                   </div>
@@ -493,9 +500,9 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
                 </div>
               </div>
               <div className="p-4 bg-primary/5 rounded-lg border border-primary/20">
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-muted-foreground" suppressHydrationWarning>
                   <span className="font-semibold text-foreground">Collateral Value:</span> $
-                  {btcAmount ? (Number.parseFloat(btcAmount) * price).toFixed(2) : "0.00"}
+                  {!mounted ? "0.00" : btcAmount ? (Number.parseFloat(btcAmount) * price).toFixed(2) : "0.00"}
                 </p>
               </div>
             </div>
@@ -509,18 +516,20 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
                     <Label htmlFor="musd-amount" className="font-semibold text-foreground">
                       Mint MUSD
                     </Label>
-                      <div className="text-xs text-muted-foreground">
-                      {loadingLimits
+                      <div className="text-xs text-muted-foreground" suppressHydrationWarning>
+                      {!mounted
                         ? "Calculating limits..."
-                        : oldDebt > BigInt(0)
+                        : loadingLimits
+                        ? "Calculating limits..."
+                        : hasExistingDebt
                         ? maxAvailableMint === 0
                           ? <span className="text-red-500">Max available: 0 MUSD (increase BTC to meet minimum)</span>
                           : `Max available: ${maxAvailableMint.toFixed(2)} MUSD`
                         : `Max (at 150%): ${btcAmount ? getMaxMusdNaive(Number.parseFloat(btcAmount)).toFixed(2) : "0.00"} MUSD`}
                     </div>
                   </div>
-                  <div className="text-xs text-muted-foreground mt-1 flex justify-between">
-                    <span><span className="font-medium">Minimum mint:</span> {minNetDebt.toFixed(2)} MUSD</span>
+                  <div className="text-xs text-muted-foreground mt-1 flex justify-between" suppressHydrationWarning>
+                    <span><span className="font-medium">Minimum mint:</span> {!mounted ? "0.00" : minNetDebt.toFixed(2)} MUSD</span>
                     <span className="text-primary cursor-pointer" onClick={() => {
                       const maxMusd = oldDebt > BigInt(0) ? maxAvailableMint : (btcAmount ? getMaxMusdNaive(Number.parseFloat(btcAmount)) : 0)
                       const defaultAmount = Math.max(maxMusd * 0.75, minNetDebt);
@@ -538,8 +547,8 @@ export function CreatePocketModal({ isOpen, onClose }: CreatePocketModalProps) {
                     placeholder="0.00"
                     className="border-border/50 focus:border-primary/50 pr-[180px]"
                   />
-                  {btcAmount && Number.parseFloat(btcAmount) > 0 && (
-                    <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
+                  {mounted && btcAmount && Number.parseFloat(btcAmount) > 0 && (
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1" suppressHydrationWarning>
                       <Button
                         type="button"
                         variant="ghost"
