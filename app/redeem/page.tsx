@@ -313,8 +313,8 @@ export default function RedeemPage() {
                         <p className="text-sm font-bold text-success">{collateralizationRatio.toFixed(1)}%</p>
                       </div>
                       <SafetyBar
-                        percent={collateralizationRatio}
-                        band={collateralizationRatio >= 150 ? "green" : "yellow"}
+                        percent={Number(collateralizationRatio.toFixed(1))}
+                        band={collateralizationRatio >= 170 ? "green" : collateralizationRatio >= 150 ? "yellow" : "red"}
                       />
                     </div>
 
@@ -326,6 +326,7 @@ export default function RedeemPage() {
                         <p className="text-xs text-muted-foreground mt-1">
                           Repay your MUSD debt to unlock your BTC. You can redeem partially or fully at any time.
                         </p>
+
                       </div>
                     </div>
 
