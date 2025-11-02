@@ -313,7 +313,7 @@ export default function RedeemPage() {
                         <p className="text-sm font-bold text-success">{collateralizationRatio.toFixed(1)}%</p>
                       </div>
                       <SafetyBar
-                        percent={Number(collateralizationRatio.toFixed(1))}
+                        percent={Number(collateralizationRatio.toFixed(1))-150}
                         band={collateralizationRatio >= 170 ? "green" : collateralizationRatio >= 150 ? "yellow" : "red"}
                       />
                     </div>
